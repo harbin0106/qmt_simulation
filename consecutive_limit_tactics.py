@@ -86,13 +86,64 @@ def handlebar(contextInfo):
 #		print(dir(obj))
 
 def trade_on_market_open(contextInfo):
-	print(f'trade_on_market_open()')
-	# 获取开盘价
-	market_data = contextInfo.get_market_data_ex(['time', 'open', 'high', 'low', 'close'], T.orderCodes, period='1m', count=1)
-	print(f'df=\n{market_data[T.orderCodes[0]].values[0][0]}')
-	datetime = pd.to_datetime(market_data[T.orderCodes[0]].values[0][0], unit='s')
-	print(f'datetime={datetime}')
-	pass
+	# print(f'trade_on_market_open()')
+	# 确认当前k线的时刻是09:30:00
+	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
+	if current_time != '09:30:00':
+		#print(f'当前时间不是09:30:00，当前时间: {current_time}')
+		return
+
+	start_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
+	# print(f'start_time={start_time}, contextInfo.barpos={contextInfo.barpos}')
+	for stock in T.orderCodes:
+		# 获取开盘价 (1分钟K线)
+		# 获取开盘价 (1分钟K线，count=-1，取09:30:00的开盘价)
+		df_open = contextInfo.get_market_data_ex(['open'], [stock], period='1m', count=1, start_time=start_time, end_time=start_time)
+		# print(f'df_open={df_open}')
+		open_price = None
+		for i, stime in enumerate(df_open[stock].index):
+			dt = pd.to_datetime(str(stime), format='%Y%m%d%H%M%S')
+			if dt.time() == datetime.time(9, 30, 0):
+				open_price = df_open[stock]['open'].iloc[i]
+				break
+		if open_price is None:
+			print(f'{stock} 未找到09:30:00的开盘价数据，跳过')
+			continue
+		print(f'{stock} 开盘价: {open_price}')
+
+		# 获取昨日收盘价 (日线数据，count=2，取第二个)
+		df_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
+		# print(f'df_yesterday={df_yesterday}')
+		yesterday_close = df_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
+		print(f'{stock} 昨日收盘价: {yesterday_close}')
+
+		# 计算涨幅
+		if yesterday_close == 0:
+			print(f'{stock} 昨日收盘价为0，跳过')
+			continue
+		pct = round((open_price - yesterday_close) / yesterday_close * 100, 2)
+		print(f'{stock} 涨幅: {pct}%')
+
+		# 计算5日均价 (日线数据)
+		df_ma = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=5)
+		ma5 = round(df_ma[stock]['close'].mean(), 2)
+		print(f'{stock} 5日均价: {ma5}')
+
+		# 策略逻辑
+		if 3 <= pct <= 8:
+			# 以开盘价下单买入500股
+			passorder(T.opType_buy, T.orderType, T.accountid, stock, 11, open_price, 500, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+			print(f'{stock} 以开盘价 {open_price} 买入500股')
+		elif (1 <= pct < 3) or (8 < pct <= 9):
+			# 以开盘价下单买入200股
+			passorder(T.opType_buy, T.orderType, T.accountid, stock, 11, open_price, 200, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+			print(f'{stock} 以开盘价 {open_price} 买入200股')
+		elif pct < 1:
+			# 以5日均线价格挂单买入 (假设买入100股，可根据需要调整)
+			passorder(T.opType_buy, T.orderType, T.accountid, stock, 13, ma5, 100, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+			print(f'{stock} 以5日均价 {ma5} 挂单买入100股')
+		else:
+			print(f'{stock} 不满足买入条件')
 	
 def get_924_open_price(contextInfo, stock_code, target_date):
 	"""
@@ -158,4 +209,3 @@ def orderError_callback(contextInfo, passOrderInfo, msg):
 	#输出下单信息以及错误信息
 	print (passOrderInfo.orderCode)
 	print (msg)
-
