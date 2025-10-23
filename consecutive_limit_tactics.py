@@ -24,11 +24,11 @@ def init(contextInfo):
 	T.userOrderId = '投资备注'
 	T.price=-1
 	contextInfo.set_universe(T.orderCodes)
+	contextInfo.set_account(T.accountid)
 	return
 	contextInfo.set_slippage(1, 0.003)
 	contextInfo.set_commission(0.0001)
 	contextInfo.capital = 1000000
-	#contextInfo.set_account(T.accountid)
 	contextInfo.max_single_order = 10000
 	contextInfo.max_position = 0.99
 
@@ -60,6 +60,9 @@ def handlebar(contextInfo):
 	if len(account) == 0:
 		print(f'账号{A.acct} 未登录 请检查')
 		return
+	# 检查是否出现了卖出信号
+	trade_on_sell_signal_check(contextInfo)
+	
 	account = account[0]
 	available_cash = int(account.m_dAvailable)
 	print(f'available_cash={available_cash}')
@@ -77,6 +80,87 @@ def handlebar(contextInfo):
 #	return
 #	for obj in account:
 #		print(dir(obj))
+
+def trade_on_sell_signal_check(contextInfo):
+	print(f'trade_on_sell_signal_check()')
+	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
+	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
+	print(f'current_time={current_time}')
+
+	stock_list = contextInfo.get_universe()
+	for stock in stock_list:
+		# 获取当前股价
+		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='1m', start_time=bar_time, end_time=bar_time, count=1)
+		if market_data[stock].empty:
+			continue
+		current_price = market_data[stock]['close'].iloc[0]
+		print(f'{stock} 当前股价: {current_price}')
+
+		# 获取昨日收盘价
+		df_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
+		if df_yesterday[stock].empty:
+			continue
+		yesterday_close = df_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天
+		print(f'{stock} 昨日收盘价: {yesterday_close}')
+
+		# 计算跌停价 (A股跌停价为昨日收盘价的90%)
+		limit_down_price = round(yesterday_close * 0.9, 2)
+		print(f'{stock} 跌停价: {limit_down_price}')
+
+		# 条件1: 在14:55时刻，股价相对于昨日收盘价下跌超过3%
+		if current_time == '14:55:00':
+			pct = (current_price - yesterday_close) / yesterday_close * 100
+			print(f'{stock} 下跌百分比: {pct:.2f}%')
+			if pct < -3:
+				print(f'{stock} 满足条件1: 14:55下跌超过3%，准备卖出')
+				trade_sell_stock(contextInfo, stock)
+
+		# 条件2: 触及跌停价
+		if current_price <= limit_down_price:
+			print(f'{stock} 触及跌停价，准备卖出')
+			trade_sell_stock(contextInfo, stock)
+
+def trade_query_info(C):
+	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
+	for o in orders:
+		print(f'股票代码: {o.m_strInstrumentID}, 市场类型: {o.m_strExchangeID}, 证券名称: {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
+		f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
+
+	deals = get_trade_detail_data('8000000213', 'stock', 'deal')
+	for dt in deals:
+		print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}', 
+		f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
+
+	positions = get_trade_detail_data('8000000213', 'stock', 'position')
+	for dt in positions:
+		print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
+
+	accounts = get_trade_detail_data('8000000213', 'stock', 'account')
+	for dt in accounts:
+		print(f'总资产: {dt.m_dBalance:.2f}, 净资产: {dt.m_dAssureAsset:.2f}, 总市值: {dt.m_dInstrumentValue:.2f}', 
+		f'总负债: {dt.m_dTotalDebit:.2f}, 可用金额: {dt.m_dAvailable:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
+
+	return orders, deals, positions, accounts
+	
+def trade_sell_stock(contextInfo, stock):
+#	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+#	for dt in positions:
+#		print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+#		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
+
+	# 获取持仓量
+	try:
+		position = contextInfo.get_instrument_detail('600491.SH')
+		print(f'position={position}')
+		volume = position['LastVolume']  # 可卖数量
+		if volume != None and volume > 0:
+			passorder(T.opType_sell, T.orderType, T.accountid, stock, T.prType, T.price, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+			print(f'{stock} 卖出 {volume} 股')
+		else:
+			print(f'{stock} 无可卖持仓')
+	except Exception as e:
+		print(f'获取持仓失败: {e}')
 
 def trade_on_market_open(contextInfo):
 	print(f'trade_on_market_open()')
@@ -137,7 +221,7 @@ def trade_on_market_open(contextInfo):
 			print(f'{stock} 以5日均价 {ma5} 挂单买入100股')
 		else:
 			print(f'{stock} 不满足买入条件')
-	
+
 def get_924_open_price(contextInfo, stock_code, target_date):
 	"""
 	获取指定股票在9:24分的开盘价
@@ -172,33 +256,23 @@ def get_924_open_price(contextInfo, stock_code, target_date):
 		return None
 
 def account_callback(contextInfo, accountInfo):
-	print('accountInfo')
 	# 输出资金账号状态
-	print(accountInfo.m_strStatus)
-	# order_shares(T.orderCodes[0], 100, contextInfo)
-
+	print(f'account_callback(): accountInfo={accountInfo}, accountInfo.m_strStatus={accountInfo.m_strStatus}')
 
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
-	print('orderInfo')
 	# 输出委托证券代码
-	print(orderInfo.m_strInstrumentID)
+	print(f'order_callback(): orderInfo={orderInfo}, orderInfo.m_strInstrumentID={orderInfo.m_strInstrumentID}')
 
 # 成交主推函数
 def deal_callback(contextInfo, dealInfo):
-	print('dealInfo')
-	# 输出成交证券代码
-	print(dealInfo.m_strInstrumentID)
+	print(f'deal_callback(): dealInfo={dealInfo}, dealInfo.m_strInstrumentID={dealInfo.m_strInstrumentID}')
 
 # 持仓主推函数
 def position_callback(contextInfo, positonInfo):
-	print('positonInfo')
 	# 输出持仓证券代码
-	print(positonInfo.m_strInstrumentID)
-
+	print(f'position_callback(): positonInfo={positionInfo}, positonInfo.m_strInstrumentID={positonInfo.m_strInstrumentID}')
+	
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
-	print('orderError_callback')
-	#输出下单信息以及错误信息
-	print (passOrderInfo.orderCode)
-	print (msg)
+	print(f'orderError_callback(): passOrderInfo.orderCode={passOrderInfo.orderCode}, msg={msg}')
