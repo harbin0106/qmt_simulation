@@ -41,42 +41,35 @@ def after_init(contextInfo):
 	# order_shares(T.orderCodes[0], 200, contextInfo)
 	
 def handlebar(contextInfo):
-	trade_on_market_open(contextInfo)
-	return
+	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
+	print(f'bar_time={bar_time}')
+	# Validate period
+	if contextInfo.period != '1m':
+		print(f'Error! contextInfo.period != "1m"! contextInfo.period={contextInfo.period}')
+		return
+	# Skip history bars
+	if not contextInfo.is_last_bar() and False:
+		# print(f'contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
+		return
+	# 确认当前k线的时刻是09:30:00
+	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
+	if current_time == '09:30:00':
+		trade_on_market_open(contextInfo)
+		return
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
-	if len(account)==0:
+	if len(account) == 0:
 		print(f'账号{A.acct} 未登录 请检查')
 		return
 	account = account[0]
 	available_cash = int(account.m_dAvailable)
 	print(f'available_cash={available_cash}')
-	df = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], T.orderCodes, period='1m', count=1)
-	print(f'df={df[T.orderCodes[0]]}')
-	open_price = df[T.orderCodes[0]].values[0][0]
-	print(f'open_price={open_price}')
-	if not contextInfo.is_last_bar() and False:
-		# print(f'contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
-		return
-	print(f'contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
-	period = contextInfo.period
-	if period != '1m':
-		print(f'Error! period != "1m"! period={period}')
-		return
-	current_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
-	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	print(f'bar_time={bar_time}')
-	if bar_time == '09:30:00':
-		print(f'bar_time == 09:30:00')
-		trade_on_market_open(T.orderCodes[0], contextInfo)
-		return
+	market_data = contextInfo.get_market_data_ex(['close'], T.orderCodes, period='1m', start_time=bar_time, end_time=bar_time, count=-1)
+	# print(f'market_data={market_data[T.orderCodes[0]]}')
 	stock_list = contextInfo.get_universe()
 	for stock in stock_list:
-		# df = contextInfo.get_market_data_ex(['close'], T.orderCodes, end_time='', period='tick', count=60, subscribe=False)
-		df = contextInfo.get_market_data_ex(['time', 'open', 'high', 'low', 'close'],
-				stock_code=[stock], period='tick', start_time='', end_time='', count=-1, dividend_type='follow', fill_data=True, subscribe=True)
-		#closes = list(df[T.orderCodes[0]].iloc[:, 0])
-		# print(f'closes=\n{closes}')
-			# Buy
+		close_price = market_data[stock].values[0][0]
+		print(f'{stock} 现价: {close_price}')
+
 #	get_924_open_price(contextInfo, T.orderCodes[0], '2025-10-22')
 #	obj_list = get_trade_detail_data(T.accountid,'stock','ACCOUNT')
 #	for obj in obj_list:
@@ -86,7 +79,7 @@ def handlebar(contextInfo):
 #		print(dir(obj))
 
 def trade_on_market_open(contextInfo):
-	# print(f'trade_on_market_open()')
+	print(f'trade_on_market_open()')
 	# 确认当前k线的时刻是09:30:00
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if current_time != '09:30:00':
