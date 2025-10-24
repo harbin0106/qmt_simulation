@@ -44,6 +44,10 @@ def init(contextInfo):
 
 def after_init(contextInfo):
 	print(f'after_init()')
+	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
+	if len(account) == 0:
+		print(f'after_init(): Error! 账号{T.accountid} 未登录! 请检查!')
+		return
 	# 按照最新价买入
 	# passorder(T.opType_buy, T.orderType, T.accountid, T.orderCodes[0], T.prType, T.price, T.volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
 	# 按照最新价卖出
@@ -64,32 +68,10 @@ def handlebar(contextInfo):
 		# print(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
 
-	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
-	if len(account) == 0:
-		print(f'handlebar(): Error! 账号{A.acct} 未登录! 请检查!')
-		return
 	# 开盘交易逻辑
 	trade_on_market_open(contextInfo)
 	# 检查是否出现了卖出信号
 	trade_on_sell_signal_check(contextInfo)
-	
-	# account = account[0]
-	# available_cash = int(account.m_dAvailable)
-	# print(f'handlebar(): available_cash={available_cash}')
-	# market_data = contextInfo.get_market_data_ex(['close'], T.orderCodes, period='1m', start_time=bar_time, end_time=bar_time, count=-1)
-	# # print(f'handlebar(): market_data={market_data[T.orderCodes[0]]}')
-	# stock_list = contextInfo.get_universe()
-	# for stock in stock_list:
-	# 	close_price = market_data[stock].values[0][0]
-	# 	print(f'handlebar(): {stock} 现价: {close_price}')
-
-#	get_924_open_price(contextInfo, T.orderCodes[0], '2025-10-22')
-#	obj_list = get_trade_detail_data(T.accountid,'stock','ACCOUNT')
-#	for obj in obj_list:
-#		print(dir(obj))#查看有哪些属性字段
-#	return
-#	for obj in account:
-#		print(dir(obj))
 
 def trade_on_sell_signal_check(contextInfo):
 	# print(f'trade_on_sell_signal_check()')
