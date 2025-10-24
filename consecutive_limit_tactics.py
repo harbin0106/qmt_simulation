@@ -126,14 +126,17 @@ def trade_on_sell_signal_check(contextInfo):
 
 def trade_query_info(contextInfo):
 	current_date = datetime.datetime.now().date()
-	three_days_ago = current_date - datetime.timedelta(days=3)
+	N_days_ago = current_date - datetime.timedelta(days=7)
 
 	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
-	print("最近3天的委托记录:")
+	print("最近7天的委托记录:")
 	for o in orders:
+		full_code = f"{o.m_strInstrumentID}.{o.m_strExchangeID}"
+		if full_code not in T.orderCodes:
+			continue
 		try:
 			order_date = datetime.datetime.strptime(o.m_strInsertTime, '%Y%m%d%H%M%S').date()
-			if order_date >= three_days_ago:
+			if order_date >= N_days_ago:
 				print(f'股票代码: {o.m_strInstrumentID}, 市场类型: {o.m_strExchangeID}, 证券名称: {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
 				f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
 		except (AttributeError, ValueError):
@@ -142,11 +145,14 @@ def trade_query_info(contextInfo):
 			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
 
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
-	print("最近3天的成交记录:")
+	print("最近7天的成交记录:")
 	for dt in deals:
+		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		if full_code not in T.orderCodes:
+			continue
 		try:
 			deal_date = datetime.datetime.strptime(dt.m_strTime, '%Y%m%d%H%M%S').date()
-			if deal_date >= three_days_ago:
+			if deal_date >= N_days_ago:
 				print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
 				f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
 		except (AttributeError, ValueError):
@@ -157,6 +163,9 @@ def trade_query_info(contextInfo):
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	print("当前持仓状态:")
 	for dt in positions:
+		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		if full_code not in T.orderCodes:
+			continue
 		print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
 
