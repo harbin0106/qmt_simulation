@@ -42,9 +42,9 @@ def after_init(contextInfo):
 	# 按照最新价卖出
 	# passorder(T.opType_sell, T.orderType, T.accountid, T.orderCodes[1], T.prType, T.price, T.volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
 	# order_shares(T.orderCodes[0], 200, contextInfo)
-	# trade_sell_stock(contextInfo, T.orderCodes[0])
-	trade_query_info(contextInfo)
-	
+	# trade_query_info(contextInfo)
+	trade_sell_stock(contextInfo, T.orderCodes[0])
+
 def handlebar(contextInfo):
 	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	print(f"\nbar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
@@ -178,23 +178,23 @@ def trade_query_info(contextInfo):
 	return orders, deals, positions, accounts
 	
 def trade_sell_stock(contextInfo, stock):
-#	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-#	for dt in positions:
-#		print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
-#		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
-
-	# 获取持仓量
-	try:
-		position = contextInfo.get_instrument_detail(stock)
-		print(f'position={position}')
-		volume = position['LastVolume']  # 可卖数量
-		if volume != None and volume > 0:
-			passorder(T.opType_sell, T.orderType, T.accountid, stock, T.prType, T.price, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-			print(f'{stock} 卖出 {volume} 股')
-		else:
-			print(f'{stock} 无可卖持仓')
-	except Exception as e:
-		print(f'获取持仓失败: {e}')
+	print(f'trade_sell_stock(): stock={stock}')
+	volume = 0
+	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	print("当前持仓状态:")
+	for dt in positions:
+		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		if full_code != stock:
+			continue
+		print(f'股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
+		volume = dt.m_nCanUseVolume  # 可卖数量
+		break
+	if volume == 0:
+		print(f'Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
+		return
+	passorder(T.opType_sell, T.orderType, T.accountid, stock, T.prType, T.price, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	print(f'{stock} 卖出 {volume} 股')
 
 def trade_on_market_open(contextInfo):
 	# 确认当前k线的时刻是09:30:00
