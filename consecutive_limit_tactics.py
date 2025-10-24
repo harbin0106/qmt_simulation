@@ -16,11 +16,14 @@ def init(contextInfo):
 	T.opType_buy = 23 	# 操作类型：23-股票买入，24-股票卖出
 	T.opType_sell = 24	# 操作类型：23-股票买入，24-股票卖出
 	T.orderType = 1101	# 单股、单账号、普通、股/手方式下单 
-	T.prType = 5		# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 6：买1价 7：买2价（组合不支持） 8：买3价（组合不支持） 9：买4价（组合不支持）
-						# 10：买5价（组合不支持） 11：（指定价）模型价（只对单股情况支持,对组合交易不支持） 12：涨跌停价 13：挂单价 14：对手价
+	T.prType = 5		# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 
+						# 6：买1价 7：买2价（组合不支持） 8：买3价（组合不支持） 9：买4价（组合不支持）
+						# 10：买5价（组合不支持） 11：（指定价）模型价（只对单股情况支持,对组合交易不支持）
+						# 12：涨跌停价 13：挂单价 14：对手价
 	T.volume = 100
 	T.strategyName = 'consecutive_limit_tactics'
-	T.quickTrade = 2 # 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
+	T.quickTrade = 2 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。
+						# 2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
 	T.userOrderId = '投资备注'
 	T.price=-1
 	contextInfo.set_universe(T.orderCodes)
@@ -42,24 +45,22 @@ def after_init(contextInfo):
 	
 def handlebar(contextInfo):
 	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	print(f'\nbar_time={bar_time}')
+	print(f"\nbar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
 	if contextInfo.period != '1m':
 		print(f'Error! contextInfo.period != "1m"! contextInfo.period={contextInfo.period}')
 		return
-	# Skip history bars
+	# Skip history bars ####################################
 	if not contextInfo.is_last_bar() and False:
 		# print(f'contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
-	# 确认当前k线的时刻是09:30:00
-	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	if current_time == '09:30:00':
-		trade_on_market_open(contextInfo)
-		return
+
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
 	if len(account) == 0:
-		print(f'账号{A.acct} 未登录 请检查')
+		print(f'Error! 账号{A.acct} 未登录! 请检查!')
 		return
+	# 开盘交易逻辑
+	trade_on_market_open(contextInfo)
 	# 检查是否出现了卖出信号
 	trade_on_sell_signal_check(contextInfo)
 	
@@ -84,33 +85,34 @@ def handlebar(contextInfo):
 def trade_on_sell_signal_check(contextInfo):
 	print(f'trade_on_sell_signal_check()')
 	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	print(f'current_time={current_time}')
 
 	stock_list = contextInfo.get_universe()
 	for stock in stock_list:
 		# 获取当前股价
 		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='1m', start_time=bar_time, end_time=bar_time, count=1)
 		if market_data[stock].empty:
+			print(f'Error! 未获取到{stock}的当前股价数据，跳过!')
 			continue
 		current_price = market_data[stock]['close'].iloc[0]
-		print(f'{stock} 当前股价: {current_price}')
+		print(f'{stock} 当前股价：{current_price:.2f}')
 
 		# 获取昨日收盘价
-		df_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
-		if df_yesterday[stock].empty:
+		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
+		if market_data_yesterday[stock].empty:
+			print(f'Error! 未获取到{stock}的昨日收盘价数据，跳过!')
 			continue
-		yesterday_close = df_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天
-		print(f'{stock} 昨日收盘价: {yesterday_close}')
+		yesterday_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天
+		print(f'{stock} 昨日收盘价: {yesterday_close:.2f}')
 
 		# 计算跌停价 (A股跌停价为昨日收盘价的90%)
 		limit_down_price = round(yesterday_close * 0.9, 2)
-		print(f'{stock} 跌停价: {limit_down_price}')
+		print(f'{stock} 跌停价: {limit_down_price:.2f}')
 
 		# 条件1: 在14:55时刻，股价相对于昨日收盘价下跌超过3%
+		current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 		if current_time == '14:55:00':
 			pct = (current_price - yesterday_close) / yesterday_close * 100
-			print(f'{stock} 下跌百分比: {pct:.2f}%')
+			print(f'{stock} 涨幅: {pct:.2f}%')
 			if pct < -3:
 				print(f'{stock} 满足条件1: 14:55下跌超过3%，准备卖出')
 				trade_sell_stock(contextInfo, stock)
@@ -163,47 +165,46 @@ def trade_sell_stock(contextInfo, stock):
 		print(f'获取持仓失败: {e}')
 
 def trade_on_market_open(contextInfo):
-	print(f'trade_on_market_open()')
 	# 确认当前k线的时刻是09:30:00
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if current_time != '09:30:00':
 		#print(f'当前时间不是09:30:00，当前时间: {current_time}')
 		return
+	print(f'trade_on_market_open()')
 
-	start_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
+	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# print(f'start_time={start_time}, contextInfo.barpos={contextInfo.barpos}')
 	for stock in T.orderCodes:
-		# 获取开盘价 (1分钟K线)
 		# 获取开盘价 (1分钟K线，count=-1，取09:30:00的开盘价)
-		df_open = contextInfo.get_market_data_ex(['open'], [stock], period='1m', count=1, start_time=start_time, end_time=start_time)
-		# print(f'df_open={df_open}')
+		market_data = contextInfo.get_market_data_ex(['open'], [stock], period='1m', count=1, start_time=bar_time, end_time=bar_time)
+		# print(f'market_data={market_data}')
 		open_price = None
-		for i, stime in enumerate(df_open[stock].index):
+		for i, stime in enumerate(market_data[stock].index):
 			dt = pd.to_datetime(str(stime), format='%Y%m%d%H%M%S')
 			if dt.time() == datetime.time(9, 30, 0):
-				open_price = df_open[stock]['open'].iloc[i]
+				open_price = market_data[stock]['open'].iloc[i]
 				break
 		if open_price is None:
-			print(f'{stock} 未找到09:30:00的开盘价数据，跳过')
+			print(f'Error! {stock} 未找到09:30:00的开盘价数据，跳过!')
 			continue
-		print(f'{stock} 开盘价: {open_price}')
+		print(f'{stock} 开盘价: {open_price:.2f}')
 
 		# 获取昨日收盘价 (日线数据，count=2，取第二个)
-		df_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
-		# print(f'df_yesterday={df_yesterday}')
-		yesterday_close = df_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
-		print(f'{stock} 昨日收盘价: {yesterday_close}')
+		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
+		# print(f'market_data_yesterday={market_data_yesterday}')
+		yesterday_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
+		print(f'{stock} 昨日收盘价: {yesterday_close:.2f}')
 
 		# 计算涨幅
 		if yesterday_close == 0:
-			print(f'{stock} 昨日收盘价为0，跳过')
+			print(f'Error! {stock} 昨日收盘价为0，跳过!')
 			continue
 		pct = round((open_price - yesterday_close) / yesterday_close * 100, 2)
 		print(f'{stock} 涨幅: {pct}%')
 
 		# 计算5日均价 (日线数据)
-		df_ma = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=5)
-		ma5 = round(df_ma[stock]['close'].mean(), 2)
+		market_data_ma = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=5)
+		ma5 = round(market_data_ma[stock]['close'].mean(), 2)
 		print(f'{stock} 5日均价: {ma5}')
 
 		# 策略逻辑
@@ -257,7 +258,7 @@ def get_924_open_price(contextInfo, stock_code, target_date):
 
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
-	print(f'account_callback(): accountInfo={accountInfo}, accountInfo.m_strStatus={accountInfo.m_strStatus}')
+	print(f'account_callback(): accountInfo.m_strStatus={accountInfo.m_strStatus}')
 
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
