@@ -8,6 +8,13 @@ class T():
 	pass
 T = T()
 
+def get_stock_name(contextInfo, stock):
+    try:
+        instrument = contextInfo.get_instrument_detail(stock)
+        return instrument.get('InstrumentName')
+    except:
+        return "未知"
+
 def init(contextInfo):
 	T.orderCodes = ['603938.SH', '301468.SZ']
 	# T.orderCodes = ['603938.SH']
@@ -92,7 +99,7 @@ def trade_on_sell_signal_check(contextInfo):
 		# 获取当前股价
 		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='1m', start_time=bar_time, end_time=bar_time, count=1)
 		if market_data[stock].empty:
-			print(f'trade_on_sell_signal_check(): Error! 未获取到{stock}的当前股价数据，跳过!')
+			print(f'trade_on_sell_signal_check(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的当前股价数据，跳过!')
 			continue
 		current_price = market_data[stock]['close'].iloc[0]
 		# print(f'trade_on_sell_signal_check(): {stock} 当前股价：{current_price:.2f}')
@@ -100,7 +107,7 @@ def trade_on_sell_signal_check(contextInfo):
 		# 获取昨日收盘价
 		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
 		if market_data_yesterday[stock].empty:
-			print(f'trade_on_sell_signal_check(): Error! 未获取到{stock}的昨日收盘价数据，跳过!')
+			print(f'trade_on_sell_signal_check(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的昨日收盘价数据，跳过!')
 			continue
 		yesterday_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天
 		# print(f'trade_on_sell_signal_check(): {stock} 昨日收盘价: {yesterday_close:.2f}')
@@ -115,12 +122,12 @@ def trade_on_sell_signal_check(contextInfo):
 			pct = (current_price - yesterday_close) / yesterday_close * 100
 			# print(f'trade_on_sell_signal_check(): {stock} 涨幅: {pct:.2f}%')
 			if pct < -3:
-				print(f'trade_on_sell_signal_check(): {stock} 满足条件1: 14:55下跌超过3%，准备卖出')
+				print(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 满足条件1: 14:55下跌超过3%，准备卖出')
 				trade_sell_stock(contextInfo, stock)
 
 		# 条件2: 触及跌停价
 		if current_price <= limit_down_price:
-			print(f'trade_on_sell_signal_check(): {stock} 触及跌停价，准备卖出')
+			print(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 触及跌停价，准备卖出')
 			trade_sell_stock(contextInfo, stock)
 
 def trade_query_info(contextInfo):
@@ -177,10 +184,10 @@ def trade_query_info(contextInfo):
 	return orders, deals, positions, accounts
 	
 def trade_sell_stock(contextInfo, stock):
-	print(f'trade_sell_stock(): stock={stock}')
+	print(f'trade_sell_stock(): stock={stock} {get_stock_name(contextInfo, stock)}')
 	volume = 0
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-	print("当前持仓状态:")
+	print("trade_sell_stock(): 当前持仓状态:")
 	for dt in positions:
 		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
 		if full_code != stock:
@@ -193,10 +200,10 @@ def trade_sell_stock(contextInfo, stock):
 		print(f'trade_sell_stock(): Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
 		return
 	passorder(T.opType_sell, T.orderType, T.accountid, stock, T.prType, T.price, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-	print(f'trade_sell_stock(): {stock} 卖出 {volume} 股')
+	print(f'trade_sell_stock(): {stock} {get_stock_name(contextInfo, stock)} 卖出 {volume} 股')
 
 def trade_buy_stock(contextInfo, stock, buy_volume):
-	print(f'trade_buy_stock(): stock={stock}, buy_volume={buy_volume}')
+	print(f'trade_buy_stock(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_volume={buy_volume}')
 
 	# 查询当前账户资金余额
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
@@ -210,18 +217,18 @@ def trade_buy_stock(contextInfo, stock, buy_volume):
 	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	market_data = contextInfo.get_market_data_ex(['close'], [stock], period='1m', start_time=bar_time, end_time=bar_time, count=1)
 	if market_data[stock].empty:
-		print(f'trade_buy_stock(): Error! 未获取到{stock}的当前股价数据，跳过!')
+		print(f'trade_buy_stock(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的当前股价数据，跳过!')
 		return
 	current_price = market_data[stock]['close'].iloc[0]
-	print(f'trade_buy_stock(): {stock} 当前股价: {current_price:.2f}')
+	print(f'trade_buy_stock(): {stock} {get_stock_name(contextInfo, stock)} 当前股价: {current_price:.2f}')
 
 	# 计算资金是否够用
 	cost = current_price * buy_volume
 	if cost <= available_cash:
 		passorder(T.opType_buy, T.orderType, T.accountid, stock, T.prType, T.price, buy_volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-		print(f'trade_buy_stock(): {stock} 买入 {buy_volume} 股，成本{cost:.2f}')
+		print(f'trade_buy_stock(): {stock} {get_stock_name(contextInfo, stock)} 买入 {buy_volume} 股，成本{cost:.2f}')
 	else:
-		print(f'trade_buy_stock(): Error! {stock} 资金不足，跳过买入{buy_volume}股，所需{cost:.2f}，可用{available_cash:.2f}')
+		print(f'trade_buy_stock(): Error! {stock} {get_stock_name(contextInfo, stock)} 资金不足，跳过买入{buy_volume}股，所需{cost:.2f}，可用{available_cash:.2f}')
 	
 def trade_on_market_open(contextInfo):
 	# 确认当前k线的时刻是09:30:00
@@ -244,27 +251,27 @@ def trade_on_market_open(contextInfo):
 				open_price = market_data[stock]['open'].iloc[i]
 				break
 		if open_price is None:
-			print(f'trade_on_market_open(): Error! {stock} 未找到09:30:00的开盘价数据，跳过!')
+			print(f'trade_on_market_open(): Error! {stock} {get_stock_name(contextInfo, stock)} 未找到09:30:00的开盘价数据，跳过!')
 			continue
-		print(f'trade_on_market_open(): {stock} 开盘价: {open_price:.2f}')
+		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 开盘价: {open_price:.2f}')
 
 		# 获取昨日收盘价 (日线数据，count=2，取第二个)
 		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
 		# print(f'market_data_yesterday={market_data_yesterday}')
 		yesterday_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
-		print(f'trade_on_market_open(): {stock} 昨日收盘价: {yesterday_close:.2f}')
+		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 昨日收盘价: {yesterday_close:.2f}')
 
 		# 计算涨幅
 		if yesterday_close == 0:
-			print(f'trade_on_market_open(): Error! {stock} 昨日收盘价为0，跳过!')
+			print(f'trade_on_market_open(): Error! {stock} {get_stock_name(contextInfo, stock)} 昨日收盘价为0，跳过!')
 			continue
 		pct = round((open_price - yesterday_close) / yesterday_close * 100, 2)
-		print(f'trade_on_market_open(): {stock} 涨幅: {pct}%')
+		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 涨幅: {pct}%')
 
 		# 计算5日均价 (日线数据)
 		market_data_ma = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=5)
 		ma5 = round(market_data_ma[stock]['close'].mean(), 2)
-		print(f'trade_on_market_open(): {stock} 5日均价: {ma5}')
+		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 5日均价: {ma5}')
 
 		# 策略逻辑
 		if 3 <= pct <= 8:
@@ -280,26 +287,35 @@ def trade_on_market_open(contextInfo):
 			volume = 100
 			trade_buy_stock(contextInfo, stock, volume)
 		else:
-			print(f'trade_on_market_open(): {stock} 不满足买入条件')
+			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 不满足买入条件')
 
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
-	print(f'account_callback(): accountInfo.m_strStatus={accountInfo.m_strStatus}')
+	if accountInfo.m_strStatus != '登录成功':
+		print(f'account_callback(): Error! 账号状态异常! accountInfo.m_strStatus={accountInfo.m_strStatus}')
 
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
 	# 输出委托证券代码
-	print(f'order_callback(): orderInfo.m_strInstrumentID={orderInfo.m_strInstrumentID}, orderInfo.m_nErrorID={orderInfo.m_nErrorID}')
+	stock = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
+	name = get_stock_name(contextInfo, stock)
+	print(f'order_callback(): {stock} {name}, orderInfo.m_nOrderStatus={orderInfo.m_nOrderStatus}')
 
 # 成交主推函数
 def deal_callback(contextInfo, dealInfo):
-	print(f'deal_callback(): dealInfo.m_strInstrumentID={dealInfo.m_strInstrumentID}, dealInfo.m_dPrice={dealInfo.m_dPrice}, dealInfo.m_dPrice={dealInfo.m_dPrice}, dealInfo.m_nVolume={dealInfo.m_nVolume}')
+	stock = f"{dealInfo.m_strInstrumentID}.{dealInfo.m_strExchangeID}"
+	name = get_stock_name(contextInfo, stock)
+	print(f'deal_callback(): {stock} {name}, dealInfo.m_dPrice={dealInfo.m_dPrice}, dealInfo.m_dPrice={dealInfo.m_dPrice}, dealInfo.m_nVolume={dealInfo.m_nVolume}')
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
 	# 输出持仓证券代码
-	print(f'position_callback(): positionInfo.m_strInstrumentID={positionInfo.m_strInstrumentID}, positionInfo.m_nVolume={positionInfo.m_nVolume}')
+	stock = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
+	name = get_stock_name(contextInfo, stock)
+	print(f'position_callback(): {stock} {name}, positionInfo.m_nVolume={positionInfo.m_nVolume}')
 	
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
-	print(f'orderError_callback(): Error! passOrderInfo.orderCode={passOrderInfo.orderCode}, msg={msg}')
+	stock = f"{passOrderInfo.m_strInstrumentID}.{passOrderInfo.m_strExchangeID}"
+	name = get_stock_name(contextInfo, stock)
+	print(f'orderError_callback(): {stock} {name}, Error! passOrderInfo.orderCode={passOrderInfo.orderCode}, msg={msg}')
