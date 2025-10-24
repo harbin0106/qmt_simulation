@@ -292,30 +292,72 @@ def trade_on_market_open(contextInfo):
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
 	if accountInfo.m_strStatus != '登录成功':
-		print(f'account_callback(): Error! 账号状态异常! accountInfo.m_strStatus={accountInfo.m_strStatus}')
+		print(f'account_callback(): Error! 账号状态异常! m_strStatus={accountInfo.m_strStatus}')
 
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
 	# 输出委托证券代码
 	stock = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, stock)
-	print(f'order_callback(): {stock} {name}, orderInfo.m_nOrderStatus={orderInfo.m_nOrderStatus}')
+	full_code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
+	if full_code not in T.orderCodes:
+		return
+	print(f'order_callback(): {stock} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
+	# # 打印所有成员变量的内容
+	# print('order_callback(): All attributes of orderInfo:')
+	# for attr in dir(orderInfo):
+	# 	if not attr.startswith('_'):
+	# 		try:
+	# 			value = getattr(orderInfo, attr)
+	# 			print(f'  {attr}: {value}')
+	# 		except:
+	# 			print(f'  {attr}: <无法获取>')
 
 # 成交主推函数
 def deal_callback(contextInfo, dealInfo):
 	stock = f"{dealInfo.m_strInstrumentID}.{dealInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, stock)
-	print(f'deal_callback(): {stock} {name}, dealInfo.m_dPrice={dealInfo.m_dPrice}, dealInfo.m_dPrice={dealInfo.m_dPrice}, dealInfo.m_nVolume={dealInfo.m_nVolume}')
+	print(f'deal_callback(): {stock} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
+	# 打印所有成员变量的内容
+	# print('deal_callback(): All attributes of dealInfo:')
+	# for attr in dir(dealInfo):
+	# 	if not attr.startswith('_'):
+	# 		try:
+	# 			value = getattr(dealInfo, attr)
+	# 			print(f'  {attr}: {value}')
+	# 		except:
+	# 			print(f'  {attr}: <无法获取>')
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
 	# 输出持仓证券代码
 	stock = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, stock)
-	print(f'position_callback(): {stock} {name}, positionInfo.m_nVolume={positionInfo.m_nVolume}')
+	full_code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
+	if full_code not in T.orderCodes:
+		return
+	print(f'position_callback(): {stock} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
+	# 打印所有成员变量的内容
+	# print('position_callback(): All attributes of positionInfo:')
+	# for attr in dir(positionInfo):
+	# 	if not attr.startswith('_'):
+	# 		try:
+	# 			value = getattr(positionInfo, attr)
+	# 			print(f'  {attr}: {value}')
+	# 		except:
+	# 			print(f'  {attr}: <无法获取>')
 	
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
-	stock = f"{passOrderInfo.m_strInstrumentID}.{passOrderInfo.m_strExchangeID}"
+	stock = f"{passOrderInfo.orderCode}"
 	name = get_stock_name(contextInfo, stock)
-	print(f'orderError_callback(): {stock} {name}, Error! passOrderInfo.orderCode={passOrderInfo.orderCode}, msg={msg}')
+	# print(f'orderError_callback(): Error! passOrderInfo.orderCode={passOrderInfo.orderCode}, msg={msg}')
+	# 打印所有成员变量的内容
+	print(f'orderError_callback(): {stock} {name}:')
+	for attr in dir(passOrderInfo):
+		if not attr.startswith('_'):
+			try:
+				value = getattr(passOrderInfo, attr)
+				print(f'  {attr}: {value}')
+			except:
+				print(f'  {attr}: <无法获取>')
