@@ -20,6 +20,17 @@ def init(contextInfo):
 	# T.orderCodes = ['603938.SH']
 	T.accountid_type = 'STOCK'
 	T.accountid = '100200109'	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
+	# 获取持仓股票代码并加入T.orderCodes
+	# positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	# i = 0
+	# for dt in positions:
+	# 	full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+	# 	if full_code not in T.orderCodes and '.BJ' not in full_code and '110059.SH' not in full_code and '110043.SH' not in full_code and '113636.SH' not in full_code and '113524.SH' not in full_code and '113626.SH' not in full_code:
+	# 		T.orderCodes.append(full_code)
+	# 		i += 1
+	# 		if i >= 10:
+	# 			break
+	print(f'init(): T.orderCodes={T.orderCodes}')
 	T.opType_buy = 23 	# 操作类型：23-股票买入，24-股票卖出
 	T.opType_sell = 24	# 操作类型：23-股票买入，24-股票卖出
 	T.orderType = 1101	# 单股、单账号、普通、股/手方式下单 
@@ -104,18 +115,17 @@ def trade_on_sell_signal_check(contextInfo):
 			pct = (current_price - yesterday_close) / yesterday_close * 100
 			# print(f'trade_on_sell_signal_check(): {stock} 涨幅: {pct:.2f}%')
 			if pct < -3:
-				print(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 满足条件1: 14:55下跌超过3%，准备卖出')
+				print(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 满足条件1: 14:55下跌超过3%，卖出')
 				trade_sell_stock(contextInfo, stock)
 
 		# 条件2: 触及跌停价
 		if current_price <= limit_down_price:
-			print(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 触及跌停价，准备卖出')
+			print(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 触及跌停价，卖出')
 			trade_sell_stock(contextInfo, stock)
 
 def trade_query_info(contextInfo):
 	current_date = datetime.datetime.now().date()
 	N_days_ago = current_date - datetime.timedelta(days=7)
-
 	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
 	print("trade_query_info(): 最近7天的委托记录:")
 	for o in orders:
@@ -125,11 +135,11 @@ def trade_query_info(contextInfo):
 		try:
 			order_date = datetime.datetime.strptime(o.m_strInsertTime, '%Y%m%d%H%M%S').date()
 			if order_date >= N_days_ago:
-				print(f'trade_query_info(): 股票代码: {o.m_strInstrumentID}, 市场类型: {o.m_strExchangeID}, 证券名称: {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
+				print(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
 				f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
 		except (AttributeError, ValueError):
 			# 如果没有时间字段或格式不匹配，打印所有
-			print(f'trade_query_info(): 股票代码: {o.m_strInstrumentID}, 市场类型: {o.m_strExchangeID}, 证券名称: {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
+			print(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
 			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
 
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
@@ -141,11 +151,11 @@ def trade_query_info(contextInfo):
 		try:
 			deal_date = datetime.datetime.strptime(dt.m_strTime, '%Y%m%d%H%M%S').date()
 			if deal_date >= N_days_ago:
-				print(f'trade_query_info(): 股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
+				print(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
 				f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
 		except (AttributeError, ValueError):
 			# 如果没有时间字段或格式不匹配，打印所有
-			print(f'trade_query_info(): 股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
+			print(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
 			f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
 
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
@@ -154,7 +164,7 @@ def trade_query_info(contextInfo):
 		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
 		if full_code not in T.orderCodes:
 			continue
-		print(f'trade_query_info(): 股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+		print(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
 
 	accounts = get_trade_detail_data(T.accountid, 'stock', 'account')
@@ -173,15 +183,16 @@ def trade_sell_stock(contextInfo, stock):
 		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
 		if full_code != stock:
 			continue
-		print(f'trade_sell_stock(): 股票代码: {dt.m_strInstrumentID}, 市场类型: {dt.m_strExchangeID}, 证券名称: {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+		print(f'trade_sell_stock(): 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
-		volume = 100 # dt.m_nCanUseVolume  # 可卖数量
+		volume = dt.m_nCanUseVolume  # 可卖数量
 		break
 	if volume == 0:
 		print(f'trade_sell_stock(): Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
 		return
+	volume = 100  # 测试时先卖100股
 	passorder(T.opType_sell, T.orderType, T.accountid, stock, T.prType, T.price, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-	print(f'trade_sell_stock(): {stock} {get_stock_name(contextInfo, stock)} 卖出 {volume} 股')
+	print(f'trade_sell_stock(): 卖出 {volume} 股')
 
 def trade_buy_stock(contextInfo, stock, buy_volume):
 	print(f'trade_buy_stock(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_volume={buy_volume}')
@@ -236,7 +247,7 @@ def trade_on_market_open(contextInfo):
 			continue
 		print(f'\ntrade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 开盘价: {open_price:.2f}')
 
-		# 获取昨日收盘价 (日线数据，count=2，取第二个)
+		# 获取昨日收盘价 (日线数据，count=2，取第1个)
 		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
 		# print(f'market_data_yesterday={market_data_yesterday}')
 		yesterday_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
@@ -258,14 +269,17 @@ def trade_on_market_open(contextInfo):
 		if 3 <= pct <= 8:
 			# 以开盘价下单买入500股
 			volume = 500
+			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件 3% <= pct <= 8%，买入{volume}股')
 			trade_buy_stock(contextInfo, stock, volume)
 		elif (1 <= pct < 3) or (8 < pct <= 9):
 			# 以开盘价下单买入200股
 			volume = 200
+			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件 1% <= pct < 3% 或 8% < pct <= 9%，买入{volume}股')
 			trade_buy_stock(contextInfo, stock, volume)
 		elif pct < 1:
 			# 以5日均线价格挂单买入 (假设买入100股，可根据需要调整)
 			volume = 100
+			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件 pct < 1%，买入{volume}股')
 			trade_buy_stock(contextInfo, stock, volume)
 		else:
 			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 不满足买入条件')
@@ -277,7 +291,6 @@ def account_callback(contextInfo, accountInfo):
 
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
-	# 输出委托证券代码
 	stock = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, stock)
 	full_code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
@@ -329,7 +342,6 @@ def deal_callback(contextInfo, dealInfo):
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
-	# 输出持仓证券代码
 	stock = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, stock)
 	full_code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
