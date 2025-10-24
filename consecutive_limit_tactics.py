@@ -187,7 +187,6 @@ def trade_sell_stock(contextInfo, stock):
 	print(f'trade_sell_stock(): stock={stock} {get_stock_name(contextInfo, stock)}')
 	volume = 0
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-	print("trade_sell_stock(): 当前持仓状态:")
 	for dt in positions:
 		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
 		if full_code != stock:
@@ -253,7 +252,7 @@ def trade_on_market_open(contextInfo):
 		if open_price is None:
 			print(f'trade_on_market_open(): Error! {stock} {get_stock_name(contextInfo, stock)} 未找到09:30:00的开盘价数据，跳过!')
 			continue
-		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 开盘价: {open_price:.2f}')
+		print(f'\ntrade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 开盘价: {open_price:.2f}')
 
 		# 获取昨日收盘价 (日线数据，count=2，取第二个)
 		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
@@ -302,7 +301,17 @@ def order_callback(contextInfo, orderInfo):
 	full_code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
 	if full_code not in T.orderCodes:
 		return
-	print(f'order_callback(): {stock} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
+	# print(f'order_callback(): {stock} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
+	# 检查委托状态并记录成交结果
+	if orderInfo.m_nOrderStatus == 56:  # 已成
+		print(f'order_callback(): 委托已全部成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}')
+	elif orderInfo.m_nOrderStatus == 55:  # 部成
+		print(f'order_callback(): 委托部分成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}')
+	elif orderInfo.m_nOrderStatus == 54:  # 已撤
+		print(f'order_callback(): 委托已撤销 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}')
+	else:
+		return
+		# print(f'order_callback(): 委托状态更新 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 状态: {orderInfo.m_nOrderStatus}')
 	# # 打印所有成员变量的内容
 	# print('order_callback(): All attributes of orderInfo:')
 	# for attr in dir(orderInfo):
@@ -317,7 +326,15 @@ def order_callback(contextInfo, orderInfo):
 def deal_callback(contextInfo, dealInfo):
 	stock = f"{dealInfo.m_strInstrumentID}.{dealInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, stock)
-	print(f'deal_callback(): {stock} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
+	# print(f'deal_callback(): {stock} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
+	# 检查成交结果并记录
+	# print(f'deal_callback(): 成交确认 - 股票: {stock} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
+	# 可以在这里添加更多逻辑，如更新全局变量、发送通知等
+	# 例如，检查是否为买入或卖出，并更新持仓统计
+	if dealInfo.m_nDirection == 48:  # 买入
+		print(f'deal_callback(): {stock} {name}, 买入成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
+	elif dealInfo.m_nDirection == 49:  # 卖出
+		print(f'deal_callback(): {stock} {name}, 卖出成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
 	# 打印所有成员变量的内容
 	# print('deal_callback(): All attributes of dealInfo:')
 	# for attr in dir(dealInfo):
@@ -336,7 +353,12 @@ def position_callback(contextInfo, positionInfo):
 	full_code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
 	if full_code not in T.orderCodes:
 		return
-	print(f'position_callback(): {stock} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
+	# print(f'position_callback(): {stock} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
+	# 检查持仓变化并记录
+	print(f'position_callback(): 持仓更新 - 股票: {stock} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}')
+	# 可以在这里添加逻辑，如检查持仓是否为0，触发卖出信号等
+	# if positionInfo.m_nVolume == 0:
+	# 	print(f'position_callback(): 持仓清空 - 股票: {stock} {name}')
 	# 打印所有成员变量的内容
 	# print('position_callback(): All attributes of positionInfo:')
 	# for attr in dir(positionInfo):
@@ -351,13 +373,14 @@ def position_callback(contextInfo, positionInfo):
 def orderError_callback(contextInfo, passOrderInfo, msg):
 	stock = f"{passOrderInfo.orderCode}"
 	name = get_stock_name(contextInfo, stock)
-	# print(f'orderError_callback(): Error! passOrderInfo.orderCode={passOrderInfo.orderCode}, msg={msg}')
+	print(f'\norderError_callback(): 下单错误 - 股票: {stock} {name}, 错误信息: {msg}')
+	# 可以在这里添加逻辑，如重试下单或发送警报
 	# 打印所有成员变量的内容
-	print(f'orderError_callback(): {stock} {name}:')
-	for attr in dir(passOrderInfo):
-		if not attr.startswith('_'):
-			try:
-				value = getattr(passOrderInfo, attr)
-				print(f'  {attr}: {value}')
-			except:
-				print(f'  {attr}: <无法获取>')
+	# print(f'orderError_callback(): {stock} {name}:')
+	# for attr in dir(passOrderInfo):
+	# 	if not attr.startswith('_'):
+	# 		try:
+	# 			value = getattr(passOrderInfo, attr)
+	# 			print(f'  {attr}: {value}')
+	# 		except:
+	# 			print(f'  {attr}: <无法获取>')
