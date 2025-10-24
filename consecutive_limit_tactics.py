@@ -42,7 +42,7 @@ def after_init(contextInfo):
 	
 def handlebar(contextInfo):
 	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	print(f'bar_time={bar_time}')
+	print(f'\nbar_time={bar_time}')
 	# Validate period
 	if contextInfo.period != '1m':
 		print(f'Error! contextInfo.period != "1m"! contextInfo.period={contextInfo.period}')
@@ -269,9 +269,9 @@ def deal_callback(contextInfo, dealInfo):
 	print(f'deal_callback(): dealInfo={dealInfo}, dealInfo.m_strInstrumentID={dealInfo.m_strInstrumentID}')
 
 # 持仓主推函数
-def position_callback(contextInfo, positonInfo):
+def position_callback(contextInfo, positionInfo):
 	# 输出持仓证券代码
-	print(f'position_callback(): positonInfo={positionInfo}, positonInfo.m_strInstrumentID={positonInfo.m_strInstrumentID}')
+	print(f'position_callback(): positionInfo={positionInfo}, positionInfo.m_strInstrumentID={positionInfo.m_strInstrumentID}')
 	
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
