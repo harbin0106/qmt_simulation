@@ -20,15 +20,15 @@ def init(contextInfo):
 	T.accountid_type = 'STOCK'
 	T.accountid = '100200109'	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
 	# 获取持仓股票代码并加入T.codes_all
-	# positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-	# i = 0
-	# for dt in positions:
-	# 	full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-	# 	if full_code not in T.codes_all and '.BJ' not in full_code and '110059.SH' not in full_code and '110043.SH' not in full_code and '113636.SH' not in full_code and '113524.SH' not in full_code and '113626.SH' not in full_code:
-	# 		T.codes_all.append(full_code)
-	# 		i += 1
-	# 		if i >= 10:
-	# 			break
+	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	i = 0
+	for dt in positions:
+		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		if full_code not in T.codes_all and '.BJ' not in full_code:
+			T.codes_all.append(full_code)
+			i += 1
+			if i >= 10:
+				break
 	T.codes_to_buy_on_market_open = ['603938.SH', '301468.SZ']
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
 	T.codes_to_sell = ['603938.SH', '301468.SZ']
@@ -65,7 +65,7 @@ def after_init(contextInfo):
 		print(f'after_init(): Error! 账号{T.accountid} 未登录! 请检查!')
 		return
 	# trade_query_info(contextInfo)
-	# trade_sell_stock(contextInfo, T.codes_all[0])
+	# trade_sell_stock(contextInfo, T.codes_all[8])
 	# trade_buy_stock(contextInfo, T.codes_all[0], 10000)
 
 def handlebar(contextInfo):
