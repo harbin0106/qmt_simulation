@@ -100,7 +100,7 @@ def trade_on_sell_signal_check(contextInfo):
 	stock_list = contextInfo.get_universe()
 	for stock in T.codes_to_sell:
 		# 获取当前股价
-		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='1m', start_time=bar_time, end_time=bar_time, count=1)
+		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='1m', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front')
 		if market_data[stock].empty:
 			print(f'trade_on_sell_signal_check(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的当前股价数据，跳过!')
 			continue
@@ -108,7 +108,7 @@ def trade_on_sell_signal_check(contextInfo):
 		# print(f'trade_on_sell_signal_check(): {stock} 当前股价：{current_price:.2f}')
 
 		# 获取昨日收盘价
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
+		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2, dividend_type='front')
 		if market_data_yesterday[stock].empty:
 			print(f'trade_on_sell_signal_check(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的昨日收盘价数据，跳过!')
 			continue
@@ -236,7 +236,7 @@ def trade_on_market_open(contextInfo):
 	# print(f'trade_on_market_open(): start_time={start_time}, contextInfo.barpos={contextInfo.barpos}')
 	for stock in T.codes_to_buy_on_market_open:
 		# 获取开盘价 (1分钟K线，count=-1，取09:30:00的开盘价)
-		market_data = contextInfo.get_market_data_ex(['open'], [stock], period='1m', count=1, start_time=bar_time, end_time=bar_time)
+		market_data = contextInfo.get_market_data_ex(['open'], [stock], period='1m', count=1, start_time=bar_time, end_time=bar_time, dividend_type='front')
 		# print(f'trade_on_market_open(): market_data={market_data}')
 		open_price = None
 		for i, stime in enumerate(market_data[stock].index):
@@ -250,7 +250,7 @@ def trade_on_market_open(contextInfo):
 		print(f'\ntrade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 开盘价: {open_price:.2f}')
 
 		# 获取昨日收盘价 (日线数据，count=2，取第1个)
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2)
+		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2, dividend_type='front')
 		# print(f'market_data_yesterday={market_data_yesterday}')
 		yesterday_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
 		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 昨日收盘价: {yesterday_close:.2f}')
@@ -263,7 +263,7 @@ def trade_on_market_open(contextInfo):
 		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 涨幅: {pct}%')
 
 		# 计算5日均价 (日线数据)
-		market_data_ma = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=5)
+		market_data_ma = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=5, dividend_type='front')
 		ma5 = round(market_data_ma[stock]['close'].mean(), 2)
 		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 5日均价: {ma5}')
 
@@ -477,7 +477,7 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
         time.sleep(0.1)  # 等待下载完成
 
         # 用get_market_data_ex获取数据，包括close和pre_close
-        market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1)
+        market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1, dividend_type='front')
         if ts_code not in market_data or market_data[ts_code].empty:
             print(f'Error! 未获取到 {ts_code} 的市场数据')
             return None
@@ -593,7 +593,7 @@ def data_download_stock(contextInfo):
     获取所有A股（沪深京）的股票代码列表，并保存到数据库。
     使用QMT接口。
     """
-    start_date = '20230101'
+    start_date = '20200101'
     end_date = '20251026'
     # base_delay = 1
 
