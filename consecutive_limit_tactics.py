@@ -383,6 +383,7 @@ def orderError_callback(contextInfo, passOrderInfo, msg):
 	# 			print(f'  {attr}: {value}')
 	# 		except:
 	# 			print(f'  {attr}: <无法获取>')
+
 def data_init_db_stock():
     """初始化股票SQLite数据库"""
     conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
@@ -405,6 +406,7 @@ def data_init_db_stock():
         high REAL,
         low REAL,
         close REAL,
+        pre_close REAL,
         volume REAL,
         amount REAL,
         turnover_rate REAL,
@@ -443,6 +445,7 @@ def data_save_stock_data(df):
             high = row['high']
             low = row['low']
             close = row['close']
+            pre_close = row['pre_close']
             volume = row['volume']
             amount = row['amount']
             turnover_rate = row.get('turnover_rate', None)
@@ -450,7 +453,7 @@ def data_save_stock_data(df):
             circ_mv = row.get('circ_mv', None)
 
             # 插入stock_data
-            cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, volume, amount, turnover_rate, pe, circ_mv))
+            cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv))
 
         conn.commit()
         conn.close()
@@ -474,14 +477,14 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
         time.sleep(0.1)  # 等待下载完成
 
         # 用get_market_data_ex获取数据，包括close和pre_close
-        market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1)
+        market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1)
         if ts_code not in market_data or market_data[ts_code].empty:
             print(f'Error! 未获取到 {ts_code} 的市场数据')
             return None
         # print(f'market_data=\n{market_data[ts_code].head()}')
         df = market_data[ts_code].reset_index()
         df['trade_date'] = pd.to_datetime(df['stime'], format='%Y%m%d').dt.strftime('%Y%m%d')
-        df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'volume': 'volume', 'amount': 'amount'})
+        df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'preClose': 'pre_close', 'volume': 'volume', 'amount': 'amount'})
         # print(f'df=\n{df.head()}')
         df['ts_code'] = ts_code
 
@@ -505,39 +508,27 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
             print(f'Error! 未获取到 {ts_code} 的换手率数据')
 
         # 获取市盈率和流通市值
-        market, code = ts_code.split('.')
-        for idx, row in df.iterrows():
-            trade_date = row['trade_date']
-            barpos = contextInfo.get_date_location(trade_date)
-            if barpos >= 0:
-                # 获取市盈率
-                try:
-                    pe_data = contextInfo.get_financial_data('PERSHAREINDEX', 'pe', market, code, 'report_time', barpos)
-                    df.at[idx, 'pe'] = pe_data if pe_data else None
-                    print(f'pe_data for {ts_code} on {trade_date}: {pe_data}')
-                except:
-                    df.at[idx, 'pe'] = None
-                    print(f'Error! 获取 {ts_code} 在 {trade_date} 的市盈率失败')
-
-                # 获取流通股本
-                try:
-                    float_share_data = contextInfo.get_financial_data('CAPITALSTRUCTURE', 'float_share', market, code, 'report_time', barpos)
-                    if float_share_data:
-                        circ_mv = float_share_data * row['close'] * 10000  # 流通市值 = 流通股本 * 收盘价 * 10000（万元）
-                        df.at[idx, 'circ_mv'] = circ_mv
-                        print(f'circ_mv for {ts_code} on {trade_date}: {circ_mv}')
-                    else:
-                        df.at[idx, 'circ_mv'] = None
-                        print(f'Error! 获取 {ts_code} 在 {trade_date} 的流通股本失败')
-                except:
-                    df.at[idx, 'circ_mv'] = None
+        try:
+            pe_data = contextInfo.get_financial_data(['PERSHAREINDEX.s_fa_eps_basic', 'CAPITALSTRUCTURE.circulating_capital'], [ts_code], start_date, end_date, report_type='announce_time')
+            if pe_data is not None and not pe_data.empty:
+                # pe_data的索引是日期，列是s_fa_eps_basic, circulating_capital
+                df = df.merge(pe_data, left_on='trade_date', right_index=True, how='left')
+                # 计算市盈率
+                # df['pe'] = df.apply(lambda row: row['close'] / row['s_fa_eps_basic'] if pd.notna(row['s_fa_eps_basic']) and row['s_fa_eps_basic'] != 0 else None, axis=1)
+                df['pe'] = np.nan
+                # 计算流通市值
+                df['circ_mv'] = df['circulating_capital'] * df['close']
             else:
-                df.at[idx, 'pe'] = None
-                df.at[idx, 'circ_mv'] = None
-                print(f'Error! {ts_code} 在 {trade_date} 的 barpos 无效，无法获取财务数据')
+                df['pe'] = None
+                df['circ_mv'] = None
+                print(f'Error! 未获取到 {ts_code} 的财务数据')
+        except Exception as e:
+            print(f'Error! 获取 {ts_code} 的财务数据失败: {e}')
+            df['pe'] = None
+            df['circ_mv'] = None
 
         # 选择需要的列
-        df = df[['ts_code', 'name', 'trade_date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
+        df = df[['ts_code', 'name', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
 
         return df
     except Exception as e:
@@ -668,14 +659,14 @@ def data_load_stock(stock_code, start_date='20150101'):
     else:
         ts_code = stock_code
 
-    columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
+    columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '前收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
     try:
         conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
         cursor = conn.cursor()
 
         # 查询指定股票数据
         cursor.execute('''
-            SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.volume, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
+            SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.pre_close, d.volume, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
             FROM stocks s
             JOIN stock_data d ON s.ts_code = d.ts_code
             WHERE d.ts_code = ? AND d.trade_date >= ?
@@ -687,7 +678,7 @@ def data_load_stock(stock_code, start_date='20150101'):
             return pd.DataFrame(columns=columns)
 
         # 转换为DataFrame
-        df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
+        df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
         # 重命名列为中文
         df = df.rename(columns={
             'ts_code': '股票代码',
@@ -695,6 +686,7 @@ def data_load_stock(stock_code, start_date='20150101'):
             'trade_date': '日期',
             'open': '开盘',
             'close': '收盘',
+            'pre_close': '前收盘',
             'high': '最高',
             'low': '最低',
             'volume': '成交量',
