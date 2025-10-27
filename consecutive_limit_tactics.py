@@ -404,25 +404,10 @@ def data_init_db_stock():
         high REAL,
         low REAL,
         close REAL,
-        pre_close REAL,
-        change REAL,
-        pct_chg REAL,
-        vol REAL,
+        volume REAL,
         amount REAL,
         turnover_rate REAL,
-        turnover_rate_f REAL,
-        volume_ratio REAL,
         pe REAL,
-        pe_ttm REAL,
-        pb REAL,
-        ps REAL,
-        ps_ttm REAL,
-        dv_ratio REAL,
-        dv_ttm REAL,
-        total_share REAL,
-        float_share REAL,
-        free_share REAL,
-        total_mv REAL,
         circ_mv REAL,
         PRIMARY KEY (ts_code, trade_date),
         FOREIGN KEY (ts_code) REFERENCES stocks(ts_code)
@@ -457,29 +442,14 @@ def data_save_stock_data(df):
             high = row['high']
             low = row['low']
             close = row['close']
-            pre_close = row['pre_close']
-            change = row['change']
-            pct_chg = row['pct_chg']
-            vol = row['vol']
+            volume = row['volume']
             amount = row['amount']
             turnover_rate = row.get('turnover_rate', None)
-            turnover_rate_f = row.get('turnover_rate_f', None)
-            volume_ratio = row.get('volume_ratio', None)
             pe = row.get('pe', None)
-            pe_ttm = row.get('pe_ttm', None)
-            pb = row.get('pb', None)
-            ps = row.get('ps', None)
-            ps_ttm = row.get('ps_ttm', None)
-            dv_ratio = row.get('dv_ratio', None)
-            dv_ttm = row.get('dv_ttm', None)
-            total_share = row.get('total_share', None)
-            float_share = row.get('float_share', None)
-            free_share = row.get('free_share', None)
-            total_mv = row.get('total_mv', None)
             circ_mv = row.get('circ_mv', None)
 
             # 插入stock_data
-            cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount, turnover_rate, turnover_rate_f, volume_ratio, pe, pe_ttm, pb, ps, ps_ttm, dv_ratio, dv_ttm, total_share, float_share, free_share, total_mv, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount, turnover_rate, turnover_rate_f, volume_ratio, pe, pe_ttm, pb, ps, ps_ttm, dv_ratio, dv_ttm, total_share, float_share, free_share, total_mv, circ_mv))
+            cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, volume, amount, turnover_rate, pe, circ_mv))
 
         conn.commit()
         conn.close()
@@ -502,43 +472,59 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
         down_history_data(ts_code, '1d', start_date, end_date)
         time.sleep(0.1)  # 等待下载完成
 
-        # 用get_local_data获取数据
-        local_data = contextInfo.get_local_data(stock_code=ts_code, start_time=start_date, end_time=end_date, period='1d')
-
-        if not local_data:
+        # 用get_market_data_ex获取数据，包括close和pre_close
+        market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1)
+        if ts_code not in market_data or market_data[ts_code].empty:
+            print(f'Error! 未获取到 {ts_code} 的市场数据')
             return None
-
-        # 处理local_data，构造DataFrame
-        data_list = []
-        for timetag, fields in local_data.items():
-            # 假设timetag是毫秒时间戳，转换为日期字符串
-            trade_date = datetime.datetime.fromtimestamp(timetag / 1000).strftime('%Y%m%d')
-            row = {
-                'trade_date': trade_date,
-                'open': fields.get('open'),
-                'high': fields.get('high'),
-                'low': fields.get('low'),
-                'close': fields.get('close'),
-                'pre_close': None,  # get_local_data 不提供
-                'change': None,
-                'pct_chg': None,
-                'vol': fields.get('volume'),
-                'amount': fields.get('amount')
-            }
-            data_list.append(row)
-
-        if not data_list:
-            return None
-
-        df = pd.DataFrame(data_list)
+        # print(f'market_data=\n{market_data[ts_code].head()}')
+        df = market_data[ts_code].reset_index()
+        df['trade_date'] = pd.to_datetime(df['stime'], format='%Y%m%d').dt.strftime('%Y%m%d')
+        df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'volume': 'volume', 'amount': 'amount'})
+        # print(f'df=\n{df.head()}')
         df['ts_code'] = ts_code
 
         # 获取股票名称
         name = get_stock_name(contextInfo, ts_code)
         df['name'] = name
 
-        # 排序按日期
-        df = df.sort_values('trade_date').reset_index(drop=True)
+        # 获取换手率
+        turnover_df = contextInfo.get_turnover_rate([ts_code], start_date, end_date)
+        if not turnover_df.empty:
+            turnover_df['trade_date'] = pd.to_datetime(turnover_df.index).strftime('%Y%m%d')
+            df = df.merge(turnover_df[['trade_date', 'turnover_rate']], on='trade_date', how='left')
+        else:
+            df['turnover_rate'] = None
+
+        # 获取市盈率和流通市值
+        market, code = ts_code.split('.')
+        for idx, row in df.iterrows():
+            trade_date = row['trade_date']
+            barpos = contextInfo.get_date_location(trade_date)
+            if barpos >= 0:
+                # 获取市盈率
+                try:
+                    pe_data = contextInfo.get_financial_data('PERSHAREINDEX', 'pe', market, code, 'report_time', barpos)
+                    df.at[idx, 'pe'] = pe_data if pe_data else None
+                except:
+                    df.at[idx, 'pe'] = None
+
+                # 获取流通股本
+                try:
+                    float_share_data = contextInfo.get_financial_data('CAPITALSTRUCTURE', 'float_share', market, code, 'report_time', barpos)
+                    if float_share_data:
+                        circ_mv = float_share_data * row['close'] * 10000  # 流通市值 = 流通股本 * 收盘价 * 10000（万元）
+                        df.at[idx, 'circ_mv'] = circ_mv
+                    else:
+                        df.at[idx, 'circ_mv'] = None
+                except:
+                    df.at[idx, 'circ_mv'] = None
+            else:
+                df.at[idx, 'pe'] = None
+                df.at[idx, 'circ_mv'] = None
+
+        # 选择需要的列
+        df = df[['ts_code', 'name', 'trade_date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
 
         return df
     except Exception as e:
@@ -605,7 +591,7 @@ def data_download_stock(contextInfo):
     """
     start_date = '20230101'
     end_date = '20251026'
-    base_delay = 1
+    # base_delay = 1
 
     # 初始化数据库
     data_init_db_stock()
@@ -642,8 +628,8 @@ def data_download_stock(contextInfo):
                     print(f"{ts_code} 数据为空，重试中...")
             except Exception as e:
                 print(f"获取 {ts_code} 数据失败 (尝试 {attempt + 1}/3): {e}")
-                delay = base_delay + random.uniform(0, 2)
-                time.sleep(delay)
+                # delay = base_delay + random.uniform(0, 2)
+                # time.sleep(delay)
                 continue
 
         if not success:
@@ -669,14 +655,14 @@ def data_load_stock(stock_code, start_date='20150101'):
     else:
         ts_code = stock_code
 
-    columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '前收盘', '最高', '最低', '成交量', '成交额', '涨跌幅', '涨跌额', '换手率', '换手率_自由流通股', '量比', '市盈率', '市盈率_TTM', '市净率', '市销率', '市销率_TTM', '股息率', '股息率_TTM', '总股本', '流通股本', '自由流通股本', '总市值', '流通市值']
+    columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
     try:
         conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
         cursor = conn.cursor()
 
         # 查询指定股票数据
         cursor.execute('''
-            SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.pre_close, d.change, d.pct_chg, d.vol, d.amount, d.turnover_rate, d.turnover_rate_f, d.volume_ratio, d.pe, d.pe_ttm, d.pb, d.ps, d.ps_ttm, d.dv_ratio, d.dv_ttm, d.total_share, d.float_share, d.free_share, d.total_mv, d.circ_mv, s.name
+            SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.volume, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
             FROM stocks s
             JOIN stock_data d ON s.ts_code = d.ts_code
             WHERE d.ts_code = ? AND d.trade_date >= ?
@@ -688,7 +674,7 @@ def data_load_stock(stock_code, start_date='20150101'):
             return pd.DataFrame(columns=columns)
 
         # 转换为DataFrame
-        df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol', 'amount', 'turnover_rate', 'turnover_rate_f', 'volume_ratio', 'pe', 'pe_ttm', 'pb', 'ps', 'ps_ttm', 'dv_ratio', 'dv_ttm', 'total_share', 'float_share', 'free_share', 'total_mv', 'circ_mv', 'name'])
+        df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
         # 重命名列为中文
         df = df.rename(columns={
             'ts_code': '股票代码',
@@ -696,27 +682,12 @@ def data_load_stock(stock_code, start_date='20150101'):
             'trade_date': '日期',
             'open': '开盘',
             'close': '收盘',
-            'pre_close': '前收盘',
             'high': '最高',
             'low': '最低',
-            'vol': '成交量',
+            'volume': '成交量',
             'amount': '成交额',
-            'pct_chg': '涨跌幅',
-            'change': '涨跌额',
             'turnover_rate': '换手率',
-            'turnover_rate_f': '换手率_自由流通股',
-            'volume_ratio': '量比',
             'pe': '市盈率',
-            'pe_ttm': '市盈率_TTM',
-            'pb': '市净率',
-            'ps': '市销率',
-            'ps_ttm': '市销率_TTM',
-            'dv_ratio': '股息率',
-            'dv_ttm': '股息率_TTM',
-            'total_share': '总股本',
-            'float_share': '流通股本',
-            'free_share': '自由流通股本',
-            'total_mv': '总市值',
             'circ_mv': '流通市值'
         })
         df = df.reset_index(drop=True)
