@@ -22,15 +22,15 @@ def init(contextInfo):
 	T.accountid_type = 'STOCK'
 	T.accountid = '100200109'	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
 	# 获取持仓股票代码并加入T.codes_all
-	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-	i = 0
-	for dt in positions:
-		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-		if full_code not in T.codes_all and '.BJ' not in full_code:
-			T.codes_all.append(full_code)
-			i += 1
-			if i >= 10:
-				break
+	# positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	# i = 0
+	# for dt in positions:
+	# 	full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+	# 	if full_code not in T.codes_all and '.BJ' not in full_code:
+	# 		T.codes_all.append(full_code)
+	# 		i += 1
+	# 		if i >= 10:
+	# 			break
 	T.codes_to_buy_on_market_open = ['603938.SH', '301468.SZ']
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
 	T.codes_to_sell = ['603938.SH', '301468.SZ']
@@ -72,6 +72,7 @@ def after_init(contextInfo):
 	data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
+	return
 	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# print(f"\nhandlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
@@ -491,10 +492,17 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
         # 获取换手率
         turnover_df = contextInfo.get_turnover_rate([ts_code], start_date, end_date)
         if not turnover_df.empty:
-            turnover_df['trade_date'] = pd.to_datetime(turnover_df.index).strftime('%Y%m%d')
-            df = df.merge(turnover_df[['trade_date', 'turnover_rate']], on='trade_date', how='left')
+            turnover_df['trade_date'] = turnover_df.index.astype(str)
+            # 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
+            if ts_code in turnover_df.columns:
+                turnover_df = turnover_df.rename(columns={ts_code: 'turnover_rate'})
+                df = df.merge(turnover_df[['trade_date', 'turnover_rate']], on='trade_date', how='left')
+            else:
+                df['turnover_rate'] = None
+                print(f'Warning! {ts_code} 的换手率数据列不存在')
         else:
             df['turnover_rate'] = None
+            print(f'Error! 未获取到 {ts_code} 的换手率数据')
 
         # 获取市盈率和流通市值
         market, code = ts_code.split('.')
@@ -506,8 +514,10 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
                 try:
                     pe_data = contextInfo.get_financial_data('PERSHAREINDEX', 'pe', market, code, 'report_time', barpos)
                     df.at[idx, 'pe'] = pe_data if pe_data else None
+                    print(f'pe_data for {ts_code} on {trade_date}: {pe_data}')
                 except:
                     df.at[idx, 'pe'] = None
+                    print(f'Error! 获取 {ts_code} 在 {trade_date} 的市盈率失败')
 
                 # 获取流通股本
                 try:
@@ -515,13 +525,16 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
                     if float_share_data:
                         circ_mv = float_share_data * row['close'] * 10000  # 流通市值 = 流通股本 * 收盘价 * 10000（万元）
                         df.at[idx, 'circ_mv'] = circ_mv
+                        print(f'circ_mv for {ts_code} on {trade_date}: {circ_mv}')
                     else:
                         df.at[idx, 'circ_mv'] = None
+                        print(f'Error! 获取 {ts_code} 在 {trade_date} 的流通股本失败')
                 except:
                     df.at[idx, 'circ_mv'] = None
             else:
                 df.at[idx, 'pe'] = None
                 df.at[idx, 'circ_mv'] = None
+                print(f'Error! {ts_code} 在 {trade_date} 的 barpos 无效，无法获取财务数据')
 
         # 选择需要的列
         df = df[['ts_code', 'name', 'trade_date', 'open', 'high', 'low', 'close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
