@@ -22,29 +22,34 @@ def init(contextInfo):
 	T.codes_all = ['603938.SH', '301468.SZ']
 	T.accountid_type = 'STOCK'
 	T.accountid = '100200109'	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
-	# 获取持仓股票代码并加入T.codes_all
-	# positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-	# i = 0
-	# for dt in positions:
-	# 	full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-	# 	if full_code not in T.codes_all and '.BJ' not in full_code:
-	# 		T.codes_all.append(full_code)
-	# 		i += 1
-	# 		if i >= 10:
-	# 			break
+	# 获取持仓股票代码并加入T.codes_to_sell，仅加载沪深主板股票
+	T.codes_to_sell = []
+	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	i = 0
+	for dt in positions:
+		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		# 仅加载沪深主板股票：上海主板（600000-603999.SH）和深圳主板（000001-000999.SZ）
+		is_main_board = (
+			(dt.m_strInstrumentID.startswith('6') and not dt.m_strInstrumentID.startswith('688') and dt.m_strExchangeID == 'SH') or
+			(dt.m_strInstrumentID.startswith('000') and dt.m_strExchangeID == 'SZ')
+		)
+		if full_code not in T.codes_to_sell and is_main_board:
+			T.codes_to_sell.append(full_code)
+			i += 1
+			if i >= 3:
+				break
+	print(f'T.codes_to_sell={T.codes_to_sell}')
 	# 读取 JSON 文件获取买入股票代码
 	with open('C:/a/trade/量化/中信证券/code/tushare20240930-20251028T212238.json', 'r', encoding='utf-8') as f:
 		data = json.load(f)
-	codes_to_buy = []
+	T.codes_to_buy_on_market_open = []
 	for stock in data['stocks']:
-		codes_to_buy.append(stock['code'])
-	T.codes_to_buy_on_market_open = codes_to_buy
+		T.codes_to_buy_on_market_open.append(stock['code'])
 	print(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
 
 	T.codes_all.extend(T.codes_to_buy_on_market_open)
 	T.codes_all = list(set(T.codes_all))
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
-	T.codes_to_sell = ['603938.SH', '301468.SZ']
 	T.codes_all.extend(T.codes_to_sell)
 	T.codes_all = list(set(T.codes_all))
 	print(f'T.codes_all={T.codes_all}')
