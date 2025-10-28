@@ -5,6 +5,7 @@ import talib
 import datetime
 import sqlite3
 import time
+import json
 
 class T():
 	pass
@@ -31,11 +32,22 @@ def init(contextInfo):
 	# 		i += 1
 	# 		if i >= 10:
 	# 			break
-	T.codes_to_buy_on_market_open = ['603938.SH', '301468.SZ']
+	# 读取 JSON 文件获取买入股票代码
+	with open('C:/a/trade/量化/中信证券/code/tushare20240930-20251028T212238.json', 'r', encoding='utf-8') as f:
+		data = json.load(f)
+	codes_to_buy = []
+	for stock in data['stocks']:
+		codes_to_buy.append(stock['code'])
+	T.codes_to_buy_on_market_open = codes_to_buy
+	print(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
+
+	T.codes_all.extend(T.codes_to_buy_on_market_open)
+	T.codes_all = list(set(T.codes_all))
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
 	T.codes_to_sell = ['603938.SH', '301468.SZ']
-
-	print(f'init(): T.codes_all={T.codes_all}')
+	T.codes_all.extend(T.codes_to_sell)
+	T.codes_all = list(set(T.codes_all))
+	print(f'T.codes_all={T.codes_all}')
 	T.opType_buy = 23 	# 操作类型：23-股票买入，24-股票卖出
 	T.opType_sell = 24	# 操作类型：23-股票买入，24-股票卖出
 	T.orderType_volume = 1101	# 单股、单账号、普通、股/手方式下单
@@ -457,7 +469,7 @@ def data_save_stock_data(df):
 
         conn.commit()
         conn.close()
-        print(f"成功保存 {ts_code} 数据，共 {len(df)} 条记录")
+        # print(f"成功保存 {ts_code} 数据，共 {len(df)} 条记录")
     except Exception as e:
         print(f"保存股票数据时出错: {e}")
 
@@ -474,7 +486,7 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
     try:
         # 用down_history_data下载数据
         down_history_data(ts_code, '1d', start_date, end_date)
-        time.sleep(0.1)  # 等待下载完成
+        # time.sleep(0.1)  # 等待下载完成
 
         # 用get_market_data_ex获取数据，包括close和pre_close
         market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1, dividend_type='front')
@@ -509,12 +521,12 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
 
         # 获取市盈率和流通市值
         try:
-            pe_data = contextInfo.get_financial_data(['PERSHAREINDEX.s_fa_eps_basic', 'CAPITALSTRUCTURE.circulating_capital'], [ts_code], start_date, end_date, report_type='announce_time')
+            pe_data = contextInfo.get_financial_data(['利润表.净利润', 'CAPITALSTRUCTURE.circulating_capital', 'CAPITALSTRUCTURE.total_capital'], [ts_code], start_date, end_date, report_type='report_time')
             if pe_data is not None and not pe_data.empty:
                 # pe_data的索引是日期，列是s_fa_eps_basic, circulating_capital
                 df = df.merge(pe_data, left_on='trade_date', right_index=True, how='left')
                 # 计算市盈率
-                # df['pe'] = df.apply(lambda row: row['close'] / row['s_fa_eps_basic'] if pd.notna(row['s_fa_eps_basic']) and row['s_fa_eps_basic'] != 0 else None, axis=1)
+                # df['pe'] = df.apply(lambda row: row['close'] * row['total_capital'] / row['净利润'] if pd.notna(row['净利润']) and row['净利润'] != 0 else None, axis=1)
                 df['pe'] = np.nan
                 # 计算流通市值
                 df['circ_mv'] = df['circulating_capital'] * df['close']
