@@ -555,55 +555,30 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
 def data_get_stock_list(contextInfo):
     """
     获取A股股票代码列表，使用QMT API获取整个市场的股票列表，包括沪深两市，创业板，科创板，和北交所股票。
-    返回: 股票代码列表（symbol格式，如 '600000'）
+    返回: 股票代码列表（带市场后缀，如 '600000.SH'）
     """
+    # 尝试获取整个A股市场的股票列表
+    # QMT API 支持 get_stock_list_in_sector，可以尝试使用 'A股' 或类似板块名
     try:
-        # 尝试获取整个A股市场的股票列表
-        # QMT API 支持 get_stock_list_in_sector，可以尝试使用 'A股' 或类似板块名
-        try:
-            all_stocks = contextInfo.get_stock_list_in_sector('沪深A股')
-        except:
-            # 如果 'A股' 不支持，尝试其他可能的板块名
-            try:
-                all_stocks = contextInfo.get_stock_list_in_sector('沪深A股')
-            except:
-                # 如果都不支持，使用指数成份股作为近似
-                print("Error! QMT API 不支持直接获取完整A股列表，使用主要指数成份股作为近似")
-
-        # 转换为symbol格式（去掉市场后缀）
-        all_codes = []
-        for stock in all_stocks:
-            if stock.endswith(('.SH', '.SZ', '.BJ')):
-                symbol = stock.split('.')[0]
-                all_codes.append(symbol)
-
-        # 去重并排序
-        all_codes = sorted(list(set(all_codes)))
-
-        # 筛选掉ST股票（通过名称过滤）
-        filtered_codes = []
-        for code in all_codes:
-            if code.startswith('6') or code.startswith('9'):  # 上海（包括科创板）
-                ts_code = code + '.SH'
-            elif code.startswith(('0', '3')):  # 深圳（包括创业板）
-                ts_code = code + '.SZ'
-            elif code.startswith('8') or code.startswith('4'):  # 北交所
-                ts_code = code + '.BJ'
-            else:
-                continue
-
-            try:
-                name = get_stock_name(contextInfo, ts_code)
-                if name and 'ST' not in name:
-                    filtered_codes.append(code)
-            except:
-                continue
-
-        print(f"从QMT API获取并过滤后共发现 {len(filtered_codes)} 只股票")
-        return filtered_codes
-    except Exception as e:
-        print(f"获取股票代码列表失败: {e}")
+        all_stocks = contextInfo.get_stock_list_in_sector('沪深A股')
+    except:
+        # 如果都不支持，使用指数成份股作为近似
+        print("Error! QMT API 不支持直接获取完整A股列表!")
         return []
+
+    # 筛选掉ST股票（通过名称过滤）
+    filtered_codes = []
+    for stock in all_stocks:
+        try:
+            name = get_stock_name(contextInfo, stock)
+            if name and 'ST' not in name:
+                filtered_codes.append(stock)
+        except:
+            print("Error! get_stock_name() exception!")
+            return []
+
+    print(f"从QMT API获取并过滤后共发现 {len(filtered_codes)} 只股票. 过滤前总数: {len(all_stocks)}")
+    return filtered_codes
 
 def data_download_stock(contextInfo):
     """
@@ -627,14 +602,7 @@ def data_download_stock(contextInfo):
     successful_downloads = 0
     failed_downloads = 0
 
-    for i, code in enumerate(all_codes):
-        # 计算 ts_code
-        if code.startswith('6'):
-            ts_code = code + '.SH'
-        elif code.startswith(('0', '3')):
-            ts_code = code + '.SZ'
-        else:
-            ts_code = code + '.BJ'
+    for i, ts_code in enumerate(all_codes):
 
         success = False
         for attempt in range(3):  # 最多重试3次
