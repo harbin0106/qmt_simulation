@@ -534,7 +534,7 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
                 # df['pe'] = df.apply(lambda row: row['close'] * row['total_capital'] / row['净利润'] if pd.notna(row['净利润']) and row['净利润'] != 0 else None, axis=1)
                 df['pe'] = np.nan
                 # 计算流通市值
-                df['circ_mv'] = df['circulating_capital'] * df['close']
+                df['circ_mv'] = df['circulating_capital'] * df['close'] / 10000  # 转换为万元
             else:
                 df['pe'] = None
                 df['circ_mv'] = None
