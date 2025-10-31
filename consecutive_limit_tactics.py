@@ -424,7 +424,7 @@ def data_init_db_stock():
         low REAL,
         close REAL,
         pre_close REAL,
-        volume REAL,
+        vol REAL,
         amount REAL,
         turnover_rate REAL,
         pe REAL,
@@ -463,14 +463,14 @@ def data_save_stock_data(df):
             low = row['low']
             close = row['close']
             pre_close = row['pre_close']
-            volume = row['volume']
+            vol = row['volume']
             amount = row['amount']
             turnover_rate = row.get('turnover_rate', None)
             pe = row.get('pe', None)
             circ_mv = row.get('circ_mv', None)
 
             # 插入stock_data
-            cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv))
+            cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, pre_close, vol, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, pre_close, vol, amount, turnover_rate, pe, circ_mv))
 
         conn.commit()
         conn.close()
@@ -611,7 +611,7 @@ def data_download_stock(contextInfo):
     使用QMT接口。
     """
     start_date = '20200101'
-    end_date = '20251026'
+    end_date = '20251031'
     # base_delay = 1
 
     # 初始化数据库
@@ -683,7 +683,7 @@ def data_load_stock(stock_code, start_date='20150101'):
 
         # 查询指定股票数据
         cursor.execute('''
-            SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.pre_close, d.volume, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
+            SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.pre_close, d.vol, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
             FROM stocks s
             JOIN stock_data d ON s.ts_code = d.ts_code
             WHERE d.ts_code = ? AND d.trade_date >= ?
@@ -695,7 +695,7 @@ def data_load_stock(stock_code, start_date='20150101'):
             return pd.DataFrame(columns=columns)
 
         # 转换为DataFrame
-        df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
+        df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'vol', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
         # 重命名列为中文
         df = df.rename(columns={
             'ts_code': '股票代码',
@@ -706,7 +706,7 @@ def data_load_stock(stock_code, start_date='20150101'):
             'pre_close': '前收盘',
             'high': '最高',
             'low': '最低',
-            'volume': '成交量',
+            'vol': '成交量',
             'amount': '成交额',
             'turnover_rate': '换手率',
             'pe': '市盈率',
