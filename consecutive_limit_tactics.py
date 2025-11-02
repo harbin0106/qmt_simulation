@@ -70,6 +70,8 @@ def init(contextInfo):
 	T.userOrderId = '投资备注'
 	T.price_invalid = -1
 	T.start_time_str = '20251031092000'
+	T.capital = 100000
+	T.stocks_to_buy = []
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
 	today = date.today()
@@ -79,11 +81,9 @@ def init(contextInfo):
 	startTime = "2025-10-31 09:15:00"
 	# print(f"startTime={startTime}")
 	contextInfo.run_time("on_timer", "3nSecond", startTime)
-
 	return
 	contextInfo.set_slippage(1, 0.003)
 	contextInfo.set_commission(0.0001)
-	contextInfo.capital = 1000000
 	contextInfo.max_single_order = 10000
 	contextInfo.max_position = 0.99
 
@@ -95,7 +95,7 @@ def on_timer(contextInfo):
 		on_timer.stop_timer = False
 	if on_timer.stop_timer:
 		return
-	stop_timer_time = pd.to_datetime('20251031092515.000', format='%Y%m%d%H%M%S.%f')
+	stop_timer_time = pd.to_datetime('2025103109256.000', format='%Y%m%d%H%M%S.%f')
 	if on_timer.start_time >= stop_timer_time:
 		print(f'on_timer(): on_timer.start_time >= stop_timer_time, stopping timer.')
 		on_timer.stop_timer = True
@@ -109,6 +109,7 @@ def on_timer(contextInfo):
 	# print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
 	target_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
+	place_of_buy_time = pd.to_datetime('20251031092453.000', format='%Y%m%d%H%M%S.%f')
 	for stock_code in T.codes_to_buy_on_market_open:
 		if data[stock_code].empty:
 			print(f'on_timer(): Error! data[{stock_code}] is empty, skip!')
@@ -120,6 +121,15 @@ def on_timer(contextInfo):
 			last_price = data[stock_code]['lastPrice'].iloc[-1]
 			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, '20251030')
 			print(f'on_timer(): stock_code={stock_code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
+			if to_buy and stock_code not in T.stocks_to_buy:
+				T.stocks_to_buy.append(stock_code)
+	# 下单买入
+	if on_timer.start_time >= place_of_buy_time and len(T.stocks_to_buy) > 0:
+		amount_of_each_stock = T.capital / len(T.stocks_to_buy)
+		for stock_code in T.stocks_to_buy:
+			trade_buy_stock(contextInfo, stock_code, amount_of_each_stock)  # 买入1万元
+			print(f'on_timer(): Placing buy order for {stock_code} {get_stock_name(contextInfo, stock_code)} at amount {amount_of_each_stock:.2f}元')
+		T.stocks_to_buy = []
 
 	on_timer.start_time += pd.Timedelta(seconds=3)
 
