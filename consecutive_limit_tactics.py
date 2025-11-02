@@ -72,7 +72,12 @@ def init(contextInfo):
 	contextInfo.set_account(T.accountid)
 	today = date.today()
 	print(f'today={today}')
-	contextInfo.run_time("on_timer", "3nSecond", "2025-10-31 09:15:00")
+	startTime = today.strftime('%Y-%m-%d') + ' 09:15:00'
+	# For testing only
+	startTime = "2025-10-31 09:15:00"
+	print(f"startTime={startTime}")
+	contextInfo.run_time("on_timer", "3nSecond", startTime)
+
 	return
 	contextInfo.set_slippage(1, 0.003)
 	contextInfo.set_commission(0.0001)
@@ -84,7 +89,13 @@ def on_timer(contextInfo):
 	print(f'on_timer()')
 	print("=" * 10 ,"集合竞价阶段" , "=" * 10)
 	ticks = contextInfo.get_full_tick(["603938.SH"])
+	# 打印ticks的timetag
+	print(f'ticks timetag: {ticks["603938.SH"]["timetag"]}')
+	# 打印ticks的lastPrice
+	print(f'ticks lastPrice: {ticks["603938.SH"]["lastPrice"]}')
+	
 	print(ticks)
+	
 
 def after_init(contextInfo):
 	print(f'after_init()')
