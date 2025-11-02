@@ -98,16 +98,19 @@ def on_timer(contextInfo):
 	# print(f'on_timer(): data["603938.SH"].index={data["603938.SH"].index}')
 	# print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
-	time_index = pd.to_datetime(data[T.codes_to_buy_on_market_open[0]].index, format='%Y%m%d%H%M%S.%f')
 	target_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
-	print(f'time_index={time_index}')
-	print(f"time_index={time_index[-1] if not time_index.empty else None}, target_time={target_time}")
-	if not time_index.empty and time_index[-1] >= target_time:
-		print("on_timer(): time_index[-1] > target_time")
-		# 判断该股票的价格
-		for stock_code in T.codes_to_buy_on_market_open:
+	for stock_code in T.codes_to_buy_on_market_open:
+		if data[stock_code].empty:
+			print(f'on_timer(): Error! data[{stock_code}] is empty, skip!')
+			continue
+		time_index = pd.to_datetime(data[stock_code].index, format='%Y%m%d%H%M%S.%f')
+		time_index_last = time_index[-1]
+		print(f'on_timer(): stock_code={stock_code}, time_index[-1]={time_index[-1]}')
+		if time_index_last >= target_time:
+			print("on_timer(): time_index_last >= target_time")
+			# 判断该股票的价格
 			last_price = data[stock_code]['lastPrice'].iloc[-1]
-			print(f'on_timer(): stock_code={stock_code}, lastPrice={last_price}')
+			print(f'on_timer(): stock_code={stock_code}, lastPrice={last_price:.2f}')
 
 	on_timer.start_time += pd.Timedelta(seconds=3)
 
