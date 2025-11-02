@@ -41,19 +41,19 @@ def init(contextInfo):
 				break
 	print(f'T.codes_to_sell={T.codes_to_sell}')
 	# 读取 JSON 文件获取买入股票代码
-	with open('C:/a/trade/量化/中信证券/code/tushare20240930-20251028T212238.json', 'r', encoding='utf-8') as f:
+	with open('C:/a/trade/量化/中信证券/code/tushare20251030-20251102T200601.json', 'r', encoding='utf-8') as f:
 		data = json.load(f)
 	T.codes_to_buy_on_market_open = []
 	for stock in data['stocks']:
 		T.codes_to_buy_on_market_open.append(stock['code'])
-	print(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
+	# print(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
 
 	T.codes_all.extend(T.codes_to_buy_on_market_open)
 	T.codes_all = list(set(T.codes_all))
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
 	T.codes_all.extend(T.codes_to_sell)
 	T.codes_all = list(set(T.codes_all))
-	print(f'T.codes_all={T.codes_all}')
+	# print(f'T.codes_all={T.codes_all}')
 	T.opType_buy = 23 	# 操作类型：23-股票买入，24-股票卖出
 	T.opType_sell = 24	# 操作类型：23-股票买入，24-股票卖出
 	T.orderType_volume = 1101	# 单股、单账号、普通、股/手方式下单
@@ -73,11 +73,11 @@ def init(contextInfo):
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
 	today = date.today()
-	print(f'today={today}')
+	# print(f'today={today}')
 	startTime = today.strftime('%Y-%m-%d') + ' 09:15:00'
 	# For testing only
 	startTime = "2025-10-31 09:15:00"
-	print(f"startTime={startTime}")
+	# print(f"startTime={startTime}")
 	contextInfo.run_time("on_timer", "3nSecond", startTime)
 
 	return
@@ -94,7 +94,7 @@ def on_timer(contextInfo):
 	print(f'on_timer(): start_time={on_timer.start_time}')
 	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
 	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=T.codes_to_buy_on_market_open, period='tick', start_time=on_timer.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
-	print(f"on_timer(): data=\n{data}")
+	# print(f"on_timer(): data=\n{data}")
 	# print(f'on_timer(): data["603938.SH"].index={data["603938.SH"].index}')
 	# print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
@@ -105,12 +105,11 @@ def on_timer(contextInfo):
 			continue
 		time_index = pd.to_datetime(data[stock_code].index, format='%Y%m%d%H%M%S.%f')
 		time_index_last = time_index[-1]
-		print(f'on_timer(): stock_code={stock_code}, time_index[-1]={time_index[-1]}')
 		if time_index_last >= target_time:
-			print("on_timer(): time_index_last >= target_time")
 			# 判断该股票的价格
 			last_price = data[stock_code]['lastPrice'].iloc[-1]
-			print(f'on_timer(): stock_code={stock_code}, lastPrice={last_price:.2f}')
+			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, '20251030')
+			print(f'on_timer(): stock_code={stock_code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
 
 	on_timer.start_time += pd.Timedelta(seconds=3)
 
@@ -143,6 +142,29 @@ def handlebar(contextInfo):
 	trade_on_market_open(contextInfo)
 	# 检查是否出现了卖出信号
 	trade_on_sell_signal_check(contextInfo)
+
+def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
+	# 使用 yesterday_date 获取昨天收盘价
+	market_data = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', start_time=yesterday_date, end_time=yesterday_date, count=1, dividend_type='front', fill_data=False)
+	if market_data[stock_code].empty:
+		print(f'trade_is_to_buy(): Error! 未获取到{stock_code} {get_stock_name(contextInfo, stock_code)} 的昨日收盘价数据!')
+		return False
+	yesterday_close = market_data[stock_code]['close'].iloc[0]
+	# 获取索引
+	# buy_date_idx = contextInfo.get_date_location(yesterday_date)
+	# 计算今天日期
+	# from datetime import datetime, timedelta
+	# today_date = (datetime.strptime(yesterday_date, '%Y%m%d') + timedelta(days=1)).strftime('%Y%m%d')
+	# current_idx = contextInfo.get_date_location(today_date)
+
+	# 计算支撑线
+	slope = np.log(1.1095)
+	BUY_THRESHOLD = 0.096
+	y = slope * 1 + np.log(yesterday_close * 0.9)
+	support_price = np.exp(y)
+	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
+	print(f'trade_is_to_buy(): {stock_code} {get_stock_name(contextInfo, stock_code)}, open_price={open_price:.2f}, yesterday_close={yesterday_close:.2f}, support_price={support_price:.2f}, yesterday_close * (1 + BUY_THRESHOLD)={yesterday_close * (1 + BUY_THRESHOLD):.2f}')
+	return open_price >= support_price and open_price >= yesterday_close * (1 + BUY_THRESHOLD)
 
 def trade_on_buy_signal_check(contextInfo):
 	# print(f'trade_on_buy_signal_check()')
@@ -322,24 +344,18 @@ def trade_on_market_open(contextInfo):
 		ma5 = round(market_data_ma[stock]['close'].mean(), 2)
 		print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 5日均价: {ma5}')
 
-		# 策略逻辑
-		if 3 <= pct <= 8:
-			# 以开盘价下单买入500股
-			volume = 500
+		# 使用 trade_is_to_buy 判断是否买入
+		yesterday_date_str = market_data_yesterday[stock]['close'].index[0]
+		if trade_is_to_buy(contextInfo, stock, open_price, yesterday_date_str):
+			# 买入逻辑，根据涨幅决定买入金额
+			if 3 <= pct <= 8:
+				volume = 500
+			elif (1 <= pct < 3) or (8 < pct <= 9):
+				volume = 200
+			else:
+				volume = 100
 			buy_amount = volume * open_price
-			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件 3% <= pct <= 8%，买入金额{buy_amount:.2f}元')
-			trade_buy_stock(contextInfo, stock, buy_amount)
-		elif (1 <= pct < 3) or (8 < pct <= 9):
-			# 以开盘价下单买入200股
-			volume = 200
-			buy_amount = volume * open_price
-			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件 1% <= pct < 3% 或 8% < pct <= 9%，买入金额{buy_amount:.2f}元')
-			trade_buy_stock(contextInfo, stock, buy_amount)
-		elif pct < 1:
-			# 以5日均线价格挂单买入 (假设买入100股，可根据需要调整)
-			volume = 100
-			buy_amount = volume * open_price
-			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件 pct < 1%，买入金额{buy_amount:.2f}元')
+			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件，买入金额{buy_amount:.2f}元')
 			trade_buy_stock(contextInfo, stock, buy_amount)
 		else:
 			print(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 不满足买入条件')
