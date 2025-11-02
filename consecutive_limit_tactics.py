@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 import talib
-import datetime
+from datetime import datetime, date, time
 import sqlite3
 import time
 import json
@@ -70,12 +70,21 @@ def init(contextInfo):
 	T.price_invalid = -1
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
+	today = date.today()
+	print(f'today={today}')
+	contextInfo.run_time("on_timer", "3nSecond", "2025-10-31 09:15:00")
 	return
 	contextInfo.set_slippage(1, 0.003)
 	contextInfo.set_commission(0.0001)
 	contextInfo.capital = 1000000
 	contextInfo.max_single_order = 10000
 	contextInfo.max_position = 0.99
+
+def on_timer(contextInfo):
+	print(f'on_timer()')
+	print("=" * 10 ,"集合竞价阶段" , "=" * 10)
+	ticks = contextInfo.get_full_tick(["603938.SH"])
+	print(ticks)
 
 def after_init(contextInfo):
 	print(f'after_init()')
@@ -86,7 +95,7 @@ def after_init(contextInfo):
 	# trade_query_info(contextInfo)
 	# trade_sell_stock(contextInfo, T.codes_all[8])
 	# trade_buy_stock(contextInfo, T.codes_all[0], 10000)
-	data_download_stock(contextInfo)
+	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
 	return
