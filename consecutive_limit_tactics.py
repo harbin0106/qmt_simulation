@@ -88,24 +88,19 @@ def init(contextInfo):
 	contextInfo.max_position = 0.99
 
 def on_timer(contextInfo):
+	# Use start_time to track the current time for data fetching
 	if not hasattr(on_timer, 'start_time'):
-		on_timer.start_time = pd.to_datetime('20251031092001.000', format='%Y%m%d%H%M%S.%f')
+		on_timer.start_time = pd.to_datetime('20251031092001', format='%Y%m%d%H%M%S')
 	print(f"on_timer(): start_time={on_timer.start_time}")
-	# 改成用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
-	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=['603938.SH'],
-	    period='tick',  # 日线数据
-	    start_time=on_timer.start_time.strftime('%Y%m%d%H%M%S'),
-	    end_time=(on_timer.start_time+pd.Timedelta(seconds=2)).strftime('%Y%m%d%H%M%S'),
-		count=-1,
-	    subscribe=True  # 不订阅实时数据
-		)
-	print(f"on_timer(): data={data}")
-	print(f'on_timer(): data["603938.SH"].index={data["603938.SH"].index}')
-	print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
+	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
+	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=['603938.SH'], period='tick', start_time=on_timer.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer.start_time+pd.Timedelta(seconds=2)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
+	# print(f"on_timer(): data={data}")
+	# print(f'on_timer(): data["603938.SH"].index={data["603938.SH"].index}')
+	# print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
 	time_index = pd.to_datetime(data["603938.SH"].index[-1], format='%Y%m%d%H%M%S.%f')
 	print(f'on_timer(): time_index={time_index}')
-	target_time = pd.to_datetime('20251031092040.000', format='%Y%m%d%H%M%S.%f')
+	target_time = pd.to_datetime('20251031092010.000', format='%Y%m%d%H%M%S.%f')
 	if time_index > target_time:
 		print("on_timer(): time_index[-1] > target_time")
 	else:
