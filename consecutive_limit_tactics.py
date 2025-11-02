@@ -6,6 +6,7 @@ from datetime import datetime, date, time
 import sqlite3
 import time
 import json
+from xtquant import xtdata
 
 class T():
 	pass
@@ -68,6 +69,7 @@ def init(contextInfo):
 						# 2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
 	T.userOrderId = '投资备注'
 	T.price_invalid = -1
+	T.start_time_str = '20251031092000'
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
 	today = date.today()
@@ -86,16 +88,31 @@ def init(contextInfo):
 	contextInfo.max_position = 0.99
 
 def on_timer(contextInfo):
-	print(f'on_timer()')
-	print("=" * 10 ,"集合竞价阶段" , "=" * 10)
-	ticks = contextInfo.get_full_tick(["603938.SH"])
-	# 打印ticks的timetag
-	print(f'ticks timetag: {ticks["603938.SH"]["timetag"]}')
-	# 打印ticks的lastPrice
-	print(f'ticks lastPrice: {ticks["603938.SH"]["lastPrice"]}')
-	
-	print(ticks)
-	
+	if not hasattr(on_timer, 'start_time'):
+		on_timer.start_time = pd.to_datetime('20251031092001.000', format='%Y%m%d%H%M%S.%f')
+	print(f"on_timer(): start_time={on_timer.start_time}")
+	# 改成用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
+	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=['603938.SH'],
+	    period='tick',  # 日线数据
+	    start_time=on_timer.start_time.strftime('%Y%m%d%H%M%S'),
+	    end_time=(on_timer.start_time+pd.Timedelta(seconds=2)).strftime('%Y%m%d%H%M%S'),
+		count=-1,
+	    subscribe=True  # 不订阅实时数据
+		)
+	print(f"on_timer(): data={data}")
+	print(f'on_timer(): data["603938.SH"].index={data["603938.SH"].index}')
+	print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
+	# 将索引转换为时间变量
+	time_index = pd.to_datetime(data["603938.SH"].index[-1], format='%Y%m%d%H%M%S.%f')
+	print(f'on_timer(): time_index={time_index}')
+	target_time = pd.to_datetime('20251031092040.000', format='%Y%m%d%H%M%S.%f')
+	if time_index > target_time:
+		print("on_timer(): time_index[-1] > target_time")
+	else:
+		print("on_timer(): not time_index[-1] > target_time")
+
+	on_timer.start_time += pd.Timedelta(seconds=3)
+
 
 def after_init(contextInfo):
 	print(f'after_init()')
