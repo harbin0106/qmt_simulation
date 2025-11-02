@@ -90,7 +90,17 @@ def init(contextInfo):
 def on_timer(contextInfo):
 	# Use start_time to track the current time for data fetching
 	if not hasattr(on_timer, 'start_time'):
-		on_timer.start_time = pd.to_datetime('20251031092434.000', format='%Y%m%d%H%M%S.%f')
+		on_timer.start_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
+	if not hasattr(on_timer, 'stop_timer'):
+		on_timer.stop_timer = False
+	if on_timer.stop_timer:
+		return
+	stop_timer_time = pd.to_datetime('20251031092515.000', format='%Y%m%d%H%M%S.%f')
+	if on_timer.start_time >= stop_timer_time:
+		print(f'on_timer(): on_timer.start_time >= stop_timer_time, stopping timer.')
+		on_timer.stop_timer = True
+		return
+	print()	
 	print(f'on_timer(): start_time={on_timer.start_time}')
 	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
 	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=T.codes_to_buy_on_market_open, period='tick', start_time=on_timer.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
