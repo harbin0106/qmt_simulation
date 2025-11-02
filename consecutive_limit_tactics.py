@@ -12,11 +12,11 @@ class T():
 T = T()
 
 def get_stock_name(contextInfo, stock):
-    try:
-        instrument = contextInfo.get_instrument_detail(stock)
-        return instrument.get('InstrumentName')
-    except:
-        return "未知"
+	try:
+		instrument = contextInfo.get_instrument_detail(stock)
+		return instrument.get('InstrumentName')
+	except:
+		return "未知"
 
 def init(contextInfo):
 	T.codes_all = ['603938.SH', '301468.SZ']
@@ -402,289 +402,289 @@ def orderError_callback(contextInfo, passOrderInfo, msg):
 	# 			print(f'  {attr}: <无法获取>')
 
 def data_init_db_stock():
-    """初始化股票SQLite数据库"""
-    conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
-    cursor = conn.cursor()
+	"""初始化股票SQLite数据库"""
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
+	cursor = conn.cursor()
 
-    # 创建股票表
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS stocks (
-        ts_code TEXT PRIMARY KEY,
-        name TEXT
-    )
-    ''')
+	# 创建股票表
+	cursor.execute('''
+	CREATE TABLE IF NOT EXISTS stocks (
+		ts_code TEXT PRIMARY KEY,
+		name TEXT
+	)
+	''')
 
-    # 创建合并的股票数据表
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS stock_data (
-        ts_code TEXT,
-        trade_date TEXT,
-        open REAL,
-        high REAL,
-        low REAL,
-        close REAL,
-        pre_close REAL,
-        vol REAL,
-        amount REAL,
-        turnover_rate REAL,
-        pe REAL,
-        circ_mv REAL,
-        PRIMARY KEY (ts_code, trade_date),
-        FOREIGN KEY (ts_code) REFERENCES stocks(ts_code)
-    )
-    ''')
+	# 创建合并的股票数据表
+	cursor.execute('''
+	CREATE TABLE IF NOT EXISTS stock_data (
+		ts_code TEXT,
+		trade_date TEXT,
+		open REAL,
+		high REAL,
+		low REAL,
+		close REAL,
+		pre_close REAL,
+		vol REAL,
+		amount REAL,
+		turnover_rate REAL,
+		pe REAL,
+		circ_mv REAL,
+		PRIMARY KEY (ts_code, trade_date),
+		FOREIGN KEY (ts_code) REFERENCES stocks(ts_code)
+	)
+	''')
 
-    conn.commit()
-    conn.close()
+	conn.commit()
+	conn.close()
 
 def data_save_stock_data(df):
-    """保存股票数据到数据库，按照data_init_db_stock()的表结构"""
-    if df is None or df.empty:
-        return
-    try:
-        conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
-        cursor = conn.cursor()
+	"""保存股票数据到数据库，按照data_init_db_stock()的表结构"""
+	if df is None or df.empty:
+		return
+	try:
+		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
+		cursor = conn.cursor()
 
-        # 提取股票信息
-        ts_code = df['ts_code'].iloc[0]
-        name = df['name'].iloc[0]
+		# 提取股票信息
+		ts_code = df['ts_code'].iloc[0]
+		name = df['name'].iloc[0]
 
-        # 插入stocks表（如果不存在）
-        cursor.execute('INSERT OR IGNORE INTO stocks (ts_code, name) VALUES (?, ?)', (ts_code, name))
+		# 插入stocks表（如果不存在）
+		cursor.execute('INSERT OR IGNORE INTO stocks (ts_code, name) VALUES (?, ?)', (ts_code, name))
 
-        # 排序数据按日期
-        df_sorted = df.sort_values('trade_date').reset_index(drop=True)
+		# 排序数据按日期
+		df_sorted = df.sort_values('trade_date').reset_index(drop=True)
 
-        # 插入数据到stock_data表
-        for _, row in df_sorted.iterrows():
-            trade_date = row['trade_date']
-            open = row['open']
-            high = row['high']
-            low = row['low']
-            close = row['close']
-            pre_close = row['pre_close']
-            vol = row['volume']
-            amount = row['amount']
-            turnover_rate = row.get('turnover_rate', None)
-            pe = row.get('pe', None)
-            circ_mv = row.get('circ_mv', None)
+		# 插入数据到stock_data表
+		for _, row in df_sorted.iterrows():
+			trade_date = row['trade_date']
+			open = row['open']
+			high = row['high']
+			low = row['low']
+			close = row['close']
+			pre_close = row['pre_close']
+			vol = row['volume']
+			amount = row['amount']
+			turnover_rate = row.get('turnover_rate', None)
+			pe = row.get('pe', None)
+			circ_mv = row.get('circ_mv', None)
 
-            # 插入stock_data
-            cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, pre_close, vol, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, pre_close, vol, amount, turnover_rate, pe, circ_mv))
+			# 插入stock_data
+			cursor.execute('INSERT OR REPLACE INTO stock_data (ts_code, trade_date, open, high, low, close, pre_close, vol, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (ts_code, trade_date, open, high, low, close, pre_close, vol, amount, turnover_rate, pe, circ_mv))
 
-        conn.commit()
-        conn.close()
-        # print(f"成功保存 {ts_code} 数据，共 {len(df)} 条记录")
-    except Exception as e:
-        print(f"保存股票数据时出错: {e}")
+		conn.commit()
+		conn.close()
+		# print(f"成功保存 {ts_code} 数据，共 {len(df)} 条记录")
+	except Exception as e:
+		print(f"保存股票数据时出错: {e}")
 
 def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
-    """
-    使用QMT接口获取单只股票的历史行情数据。
-    参数:
-        contextInfo: QMT上下文
-        ts_code: 股票代码 (如 '600000.SH' 或 '000001.SZ')
-        start_date: 开始日期 (YYYYMMDD)
-        end_date: 结束日期 (YYYYMMDD)
-    返回: DataFrame 或 None (如果出错)
-    """
-    try:
-        # 用down_history_data下载数据
-        down_history_data(ts_code, '1d', start_date, end_date)
-        # time.sleep(0.1)  # 等待下载完成
+	"""
+	使用QMT接口获取单只股票的历史行情数据。
+	参数:
+		contextInfo: QMT上下文
+		ts_code: 股票代码 (如 '600000.SH' 或 '000001.SZ')
+		start_date: 开始日期 (YYYYMMDD)
+		end_date: 结束日期 (YYYYMMDD)
+	返回: DataFrame 或 None (如果出错)
+	"""
+	try:
+		# 用down_history_data下载数据
+		down_history_data(ts_code, '1d', start_date, end_date)
+		# time.sleep(0.1)  # 等待下载完成
 
-        # 用get_market_data_ex获取数据，包括close和pre_close
-        market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1, dividend_type='front', fill_data=False)
-        if ts_code not in market_data or market_data[ts_code].empty:
-            print(f'Error! 未获取到 {ts_code} 的市场数据')
-            return None
-        # print(f'market_data=\n{market_data[ts_code].head()}')
-        df = market_data[ts_code].reset_index()
-        df['trade_date'] = pd.to_datetime(df['stime'], format='%Y%m%d').dt.strftime('%Y%m%d')
-        df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'preClose': 'pre_close', 'volume': 'volume', 'amount': 'amount'})
-        # print(f'df=\n{df.head()}')
-        df['ts_code'] = ts_code
+		# 用get_market_data_ex获取数据，包括close和pre_close
+		market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [ts_code], period='1d', start_time=start_date, end_time=end_date, count=-1, dividend_type='front', fill_data=False)
+		if ts_code not in market_data or market_data[ts_code].empty:
+			print(f'Error! 未获取到 {ts_code} 的市场数据')
+			return None
+		# print(f'market_data=\n{market_data[ts_code].head()}')
+		df = market_data[ts_code].reset_index()
+		df['trade_date'] = pd.to_datetime(df['stime'], format='%Y%m%d').dt.strftime('%Y%m%d')
+		df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'preClose': 'pre_close', 'volume': 'volume', 'amount': 'amount'})
+		# print(f'df=\n{df.head()}')
+		df['ts_code'] = ts_code
 
-        # 获取股票名称
-        name = get_stock_name(contextInfo, ts_code)
-        df['name'] = name
+		# 获取股票名称
+		name = get_stock_name(contextInfo, ts_code)
+		df['name'] = name
 
-        # 获取换手率
-        turnover_df = contextInfo.get_turnover_rate([ts_code], start_date, end_date)
-        if not turnover_df.empty:
-            turnover_df['trade_date'] = turnover_df.index.astype(str)
-            # 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
-            if ts_code in turnover_df.columns:
-                turnover_df = turnover_df.rename(columns={ts_code: 'turnover_rate'})
-                df = df.merge(turnover_df[['trade_date', 'turnover_rate']], on='trade_date', how='left')
-            else:
-                df['turnover_rate'] = None
-                print(f'Warning! {ts_code} 的换手率数据列不存在')
-        else:
-            df['turnover_rate'] = None
-            print(f'Error! 未获取到 {ts_code} 的换手率数据')
+		# 获取换手率
+		turnover_df = contextInfo.get_turnover_rate([ts_code], start_date, end_date)
+		if not turnover_df.empty:
+			turnover_df['trade_date'] = turnover_df.index.astype(str)
+			# 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
+			if ts_code in turnover_df.columns:
+				turnover_df = turnover_df.rename(columns={ts_code: 'turnover_rate'})
+				df = df.merge(turnover_df[['trade_date', 'turnover_rate']], on='trade_date', how='left')
+			else:
+				df['turnover_rate'] = None
+				print(f'Warning! {ts_code} 的换手率数据列不存在')
+		else:
+			df['turnover_rate'] = None
+			print(f'Error! 未获取到 {ts_code} 的换手率数据')
 
-        # 获取市盈率和流通市值
-        try:
-            pe_data = contextInfo.get_financial_data(['利润表.净利润', 'CAPITALSTRUCTURE.circulating_capital', 'CAPITALSTRUCTURE.total_capital'], [ts_code], start_date, end_date, report_type='report_time')
-            if pe_data is not None and not pe_data.empty:
-                # pe_data的索引是日期，列是s_fa_eps_basic, circulating_capital
-                df = df.merge(pe_data, left_on='trade_date', right_index=True, how='left')
-                # 计算市盈率
-                # df['pe'] = df.apply(lambda row: row['close'] * row['total_capital'] / row['净利润'] if pd.notna(row['净利润']) and row['净利润'] != 0 else None, axis=1)
-                df['pe'] = np.nan
-                # 计算流通市值
-                df['circ_mv'] = df['circulating_capital'] * df['close'] / 10000  # 转换为万元
-            else:
-                df['pe'] = None
-                df['circ_mv'] = None
-                print(f'Error! 未获取到 {ts_code} 的财务数据')
-        except Exception as e:
-            print(f'Error! 获取 {ts_code} 的财务数据失败: {e}')
-            df['pe'] = None
-            df['circ_mv'] = None
+		# 获取市盈率和流通市值
+		try:
+			pe_data = contextInfo.get_financial_data(['利润表.净利润', 'CAPITALSTRUCTURE.circulating_capital', 'CAPITALSTRUCTURE.total_capital'], [ts_code], start_date, end_date, report_type='report_time')
+			if pe_data is not None and not pe_data.empty:
+				# pe_data的索引是日期，列是s_fa_eps_basic, circulating_capital
+				df = df.merge(pe_data, left_on='trade_date', right_index=True, how='left')
+				# 计算市盈率
+				# df['pe'] = df.apply(lambda row: row['close'] * row['total_capital'] / row['净利润'] if pd.notna(row['净利润']) and row['净利润'] != 0 else None, axis=1)
+				df['pe'] = np.nan
+				# 计算流通市值
+				df['circ_mv'] = df['circulating_capital'] * df['close'] / 10000  # 转换为万元
+			else:
+				df['pe'] = None
+				df['circ_mv'] = None
+				print(f'Error! 未获取到 {ts_code} 的财务数据')
+		except Exception as e:
+			print(f'Error! 获取 {ts_code} 的财务数据失败: {e}')
+			df['pe'] = None
+			df['circ_mv'] = None
 
-        # 选择需要的列
-        df = df[['ts_code', 'name', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
+		# 选择需要的列
+		df = df[['ts_code', 'name', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
 
-        return df
-    except Exception as e:
-        print(f"获取 {ts_code} 数据时出错: {e}")
-        return None
+		return df
+	except Exception as e:
+		print(f"获取 {ts_code} 数据时出错: {e}")
+		return None
 
 def data_get_stock_list(contextInfo):
-    """
-    获取A股股票代码列表，使用QMT API获取整个市场的股票列表，包括沪深两市，创业板，科创板，和北交所股票。
-    返回: 股票代码列表（带市场后缀，如 '600000.SH'）
-    """
-    # 尝试获取整个A股市场的股票列表
-    # QMT API 支持 get_stock_list_in_sector，可以尝试使用 'A股' 或类似板块名
-    try:
-        all_stocks = contextInfo.get_stock_list_in_sector('沪深A股')
-    except:
-        # 如果都不支持，使用指数成份股作为近似
-        print("Error! QMT API 不支持直接获取完整A股列表!")
-        return []
+	"""
+	获取A股股票代码列表，使用QMT API获取整个市场的股票列表，包括沪深两市，创业板，科创板，和北交所股票。
+	返回: 股票代码列表（带市场后缀，如 '600000.SH'）
+	"""
+	# 尝试获取整个A股市场的股票列表
+	# QMT API 支持 get_stock_list_in_sector，可以尝试使用 'A股' 或类似板块名
+	try:
+		all_stocks = contextInfo.get_stock_list_in_sector('沪深A股')
+	except:
+		# 如果都不支持，使用指数成份股作为近似
+		print("Error! QMT API 不支持直接获取完整A股列表!")
+		return []
 
-    # 筛选掉ST股票（通过名称过滤）
-    filtered_codes = []
-    for stock in all_stocks:
-        try:
-            name = get_stock_name(contextInfo, stock)
-            if name and 'ST' not in name:
-                filtered_codes.append(stock)
-        except:
-            print("Error! get_stock_name() exception!")
-            return []
+	# 筛选掉ST股票（通过名称过滤）
+	filtered_codes = []
+	for stock in all_stocks:
+		try:
+			name = get_stock_name(contextInfo, stock)
+			if name and 'ST' not in name:
+				filtered_codes.append(stock)
+		except:
+			print("Error! get_stock_name() exception!")
+			return []
 
-    print(f"从QMT API获取并过滤后共发现 {len(filtered_codes)} 只股票. 过滤前总数: {len(all_stocks)}")
-    return filtered_codes
+	print(f"从QMT API获取并过滤后共发现 {len(filtered_codes)} 只股票. 过滤前总数: {len(all_stocks)}")
+	return filtered_codes
 
 def data_download_stock(contextInfo):
-    """
-    获取所有A股（沪深京）的股票代码列表，并保存到数据库。
-    使用QMT接口。
-    """
-    start_date = '20200101'
-    end_date = '20251031'
-    # base_delay = 1
+	"""
+	获取所有A股（沪深京）的股票代码列表，并保存到数据库。
+	使用QMT接口。
+	"""
+	start_date = '20200101'
+	end_date = '20251031'
+	# base_delay = 1
 
-    # 初始化数据库
-    data_init_db_stock()
+	# 初始化数据库
+	data_init_db_stock()
 
-    # 获取股票列表
-    all_codes = data_get_stock_list(contextInfo)
-    if not all_codes:
-        print("无法获取股票列表，退出")
-        return
+	# 获取股票列表
+	all_codes = data_get_stock_list(contextInfo)
+	if not all_codes:
+		print("无法获取股票列表，退出")
+		return
 
-    total_stocks = len(all_codes)
-    successful_downloads = 0
-    failed_downloads = 0
+	total_stocks = len(all_codes)
+	successful_downloads = 0
+	failed_downloads = 0
 
-    for i, ts_code in enumerate(all_codes):
+	for i, ts_code in enumerate(all_codes):
 
-        success = False
-        for attempt in range(3):  # 最多重试3次
-            try:
-                df = data_download_single_stock_data(contextInfo, ts_code, start_date, end_date)
-                if df is not None and not df.empty:
-                    data_save_stock_data(df)
-                    success = True
-                    successful_downloads += 1
-                    break
-                else:
-                    print(f"{ts_code} 数据为空，重试中...")
-            except Exception as e:
-                print(f"获取 {ts_code} 数据失败 (尝试 {attempt + 1}/3): {e}")
-                # delay = base_delay + random.uniform(0, 2)
-                # time.sleep(delay)
-                continue
+		success = False
+		for attempt in range(3):  # 最多重试3次
+			try:
+				df = data_download_single_stock_data(contextInfo, ts_code, start_date, end_date)
+				if df is not None and not df.empty:
+					data_save_stock_data(df)
+					success = True
+					successful_downloads += 1
+					break
+				else:
+					print(f"{ts_code} 数据为空，重试中...")
+			except Exception as e:
+				print(f"获取 {ts_code} 数据失败 (尝试 {attempt + 1}/3): {e}")
+				# delay = base_delay + random.uniform(0, 2)
+				# time.sleep(delay)
+				continue
 
-        if not success:
-            print(f"获取 {ts_code} 数据失败，已达到最大重试次数")
-            failed_downloads += 1
+		if not success:
+			print(f"获取 {ts_code} 数据失败，已达到最大重试次数")
+			failed_downloads += 1
 
-        # 打印进度
-        progress = (i + 1) / total_stocks * 100
-        print(f"\r进度: {i + 1}/{total_stocks} ({progress:.1f}%) - 成功: {successful_downloads}, 失败: {failed_downloads}", end='')
+		# 打印进度
+		progress = (i + 1) / total_stocks * 100
+		print(f"\r进度: {i + 1}/{total_stocks} ({progress:.1f}%) - 成功: {successful_downloads}, 失败: {failed_downloads}", end='')
 
-    print(f"\n下载完成! 总计: {total_stocks}, 成功: {successful_downloads}, 失败: {failed_downloads}")
+	print(f"\n下载完成! 总计: {total_stocks}, 成功: {successful_downloads}, 失败: {failed_downloads}")
 
 def data_load_stock(stock_code, start_date='20150101'):
-    """直接从数据库加载指定股票数据"""
-    # 转换 stock_code 到 ts_code
-    if not stock_code.endswith(('.SH', '.SZ', '.BJ')):
-        if stock_code.startswith('6'):
-            ts_code = stock_code + '.SH'
-        elif stock_code.startswith(('0', '3')):
-            ts_code = stock_code + '.SZ'
-        else:
-            ts_code = stock_code + '.BJ'
-    else:
-        ts_code = stock_code
+	"""直接从数据库加载指定股票数据"""
+	# 转换 stock_code 到 ts_code
+	if not stock_code.endswith(('.SH', '.SZ', '.BJ')):
+		if stock_code.startswith('6'):
+			ts_code = stock_code + '.SH'
+		elif stock_code.startswith(('0', '3')):
+			ts_code = stock_code + '.SZ'
+		else:
+			ts_code = stock_code + '.BJ'
+	else:
+		ts_code = stock_code
 
-    columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '前收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
-    try:
-        conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
-        cursor = conn.cursor()
+	columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '前收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
+	try:
+		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
+		cursor = conn.cursor()
 
-        # 查询指定股票数据
-        cursor.execute('''
-            SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.pre_close, d.vol, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
-            FROM stocks s
-            JOIN stock_data d ON s.ts_code = d.ts_code
-            WHERE d.ts_code = ? AND d.trade_date >= ?
-            ORDER BY d.trade_date
-        ''', (ts_code, start_date))
-        rows = cursor.fetchall()
+		# 查询指定股票数据
+		cursor.execute('''
+			SELECT d.ts_code, d.trade_date, d.open, d.high, d.low, d.close, d.pre_close, d.vol, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
+			FROM stocks s
+			JOIN stock_data d ON s.ts_code = d.ts_code
+			WHERE d.ts_code = ? AND d.trade_date >= ?
+			ORDER BY d.trade_date
+		''', (ts_code, start_date))
+		rows = cursor.fetchall()
 
-        if not rows:
-            return pd.DataFrame(columns=columns)
+		if not rows:
+			return pd.DataFrame(columns=columns)
 
-        # 转换为DataFrame
-        df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'vol', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
-        # 重命名列为中文
-        df = df.rename(columns={
-            'ts_code': '股票代码',
-            'name': '股票名称',
-            'trade_date': '日期',
-            'open': '开盘',
-            'close': '收盘',
-            'pre_close': '前收盘',
-            'high': '最高',
-            'low': '最低',
-            'vol': '成交量',
-            'amount': '成交额',
-            'turnover_rate': '换手率',
-            'pe': '市盈率',
-            'circ_mv': '流通市值'
-        })
-        df = df.reset_index(drop=True)
-        return df
-    except Exception as e:
-        print(f"从数据库加载股票 {stock_code} 数据失败: {e}")
-        return pd.DataFrame(columns=columns)
-    finally:
-        if 'conn' in locals():
-            conn.close()
+		# 转换为DataFrame
+		df = pd.DataFrame(rows, columns=['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'vol', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
+		# 重命名列为中文
+		df = df.rename(columns={
+			'ts_code': '股票代码',
+			'name': '股票名称',
+			'trade_date': '日期',
+			'open': '开盘',
+			'close': '收盘',
+			'pre_close': '前收盘',
+			'high': '最高',
+			'low': '最低',
+			'vol': '成交量',
+			'amount': '成交额',
+			'turnover_rate': '换手率',
+			'pe': '市盈率',
+			'circ_mv': '流通市值'
+		})
+		df = df.reset_index(drop=True)
+		return df
+	except Exception as e:
+		print(f"从数据库加载股票 {stock_code} 数据失败: {e}")
+		return pd.DataFrame(columns=columns)
+	finally:
+		if 'conn' in locals():
+			conn.close()
