@@ -90,7 +90,7 @@ def init(contextInfo):
 def on_timer(contextInfo):
 	# Use start_time to track the current time for data fetching
 	if not hasattr(on_timer, 'start_time'):
-		on_timer.start_time = pd.to_datetime('20251031092001', format='%Y%m%d%H%M%S')
+		on_timer.start_time = pd.to_datetime('20251031092434', format='%Y%m%d%H%M%S')
 	print(f"on_timer(): start_time={on_timer.start_time}")
 	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
 	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=['603938.SH'], period='tick', start_time=on_timer.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer.start_time+pd.Timedelta(seconds=2)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
@@ -99,12 +99,13 @@ def on_timer(contextInfo):
 	# print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
 	time_index = pd.to_datetime(data["603938.SH"].index[-1], format='%Y%m%d%H%M%S.%f')
-	print(f'on_timer(): time_index={time_index}')
-	target_time = pd.to_datetime('20251031092010.000', format='%Y%m%d%H%M%S.%f')
-	if time_index > target_time:
+	# print(f'on_timer(): time_index={time_index}')
+	target_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
+	if time_index >= target_time:
 		print("on_timer(): time_index[-1] > target_time")
-	else:
-		print("on_timer(): not time_index[-1] > target_time")
+		# 判断该股票的价格
+		last_price = data["603938.SH"]['lastPrice'].iloc[-1]
+		print(f'on_timer(): lastPrice={last_price}')
 
 	on_timer.start_time += pd.Timedelta(seconds=3)
 
