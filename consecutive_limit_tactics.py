@@ -187,6 +187,8 @@ def after_init(contextInfo):
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
+	trade_get_support_line_value(contextInfo, '603938.SH', '20251031', '20251103')
+	return;
 	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	print()
 	print(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
@@ -195,14 +197,14 @@ def handlebar(contextInfo):
 		print(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
 		return
 	# Skip history bars ####################################
-	if not contextInfo.is_last_bar():
+	if not contextInfo.is_last_bar() and False:
 		print(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
 
 	# # 开盘交易逻辑
 	# trade_on_market_open(contextInfo)
 	# # 检查是否出现了卖出信号
-	# trade_on_sell_signal_check(contextInfo)
+	trade_on_sell_signal_check(contextInfo)
 
 def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
 	# 使用 yesterday_date 获取昨天收盘价
@@ -228,17 +230,30 @@ def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
 	return open_price >= support_price and open_price >= yesterday_close * (1 + BUY_THRESHOLD)
 
 def trade_on_buy_signal_check(contextInfo):
-	# print(f'trade_on_buy_signal_check()')
-	
+	# print(f'trade_on_buy_signal_check()')	
 	pass
 
+def trade_get_support_line_value(contextInfo, stock_code, recommendation_date, current_date):
+	recommendation_date = '20250923'
+	current_date = '20250925'
+	stock_code = '600167.SH'
+	slope = np.log(1.1095)
+	# 获取从recommendation_date到current_date的收盘价数据
+	market_data = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', start_time=recommendation_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False)
+	# 计算交易日天数，不包括停牌日期
+	closes = market_data[stock_code]['close']
+	trading_days_count = closes.dropna().shape[0]
+	recommendation_close = closes.iloc[0]
+	support_line_value = np.exp((trading_days_count - 1) * slope + np.log(recommendation_close * 0.9))
+	print(f'trade_get_support_line_value(): trading_days_count={trading_days_count}, closes={closes.tolist()}, recommendation_close={recommendation_close:.2f}, support_line_value={support_line_value:.2f}')
+	return support_line_value
+
 def trade_on_sell_signal_check(contextInfo):
-	# print(f'trade_on_sell_signal_check()')
+	print(f'trade_on_sell_signal_check()')
 	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	stock_list = contextInfo.get_universe()
 	for stock in T.codes_to_sell:
 		# 获取当前股价
-		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='1m', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False)
+		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='tick', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False)
 		if market_data[stock].empty:
 			print(f'trade_on_sell_signal_check(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的当前股价数据，跳过!')
 			continue
