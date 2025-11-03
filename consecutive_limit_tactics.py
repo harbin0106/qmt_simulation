@@ -113,23 +113,23 @@ def on_timer(contextInfo):
 
 	ticks = contextInfo.get_full_tick(T.codes_to_buy_on_market_open)
 	# print(f'on_timer(): ticks=\n{ticks}')
-	for stock_code in T.codes_to_buy_on_market_open:
-		last_price = ticks[stock_code]['lastPrice']
+	for code in T.codes_to_buy_on_market_open:
+		last_price = ticks[code]['lastPrice']
 		trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
 		if len(trading_dates) < 2:
 			print(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
 			continue
 		yesterday_date = trading_dates[-2]
-		to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, yesterday_date)
-		print(f'on_timer(): stock_code={stock_code} {get_stock_name(contextInfo, stock_code)}, current_time={current_time}, last_price={last_price:.2f}, yesterday_date={yesterday_date}, to_buy={to_buy}')
-		if to_buy and stock_code not in T.stocks_to_buy:
-			T.stocks_to_buy.append(stock_code)
+		to_buy = trade_is_to_buy(contextInfo, code, last_price, yesterday_date)
+		print(f'on_timer(): code={code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, yesterday_date={yesterday_date}, to_buy={to_buy}')
+		if to_buy and code not in T.stocks_to_buy:
+			T.stocks_to_buy.append(code)
 	# 下单买入
 	if current_time >= buy_stock_time and len(T.stocks_to_buy) > 0:
 		amount_of_each_stock = T.capital / len(T.stocks_to_buy)
-		for stock_code in T.stocks_to_buy:
-			trade_buy_stock(contextInfo, stock_code, amount_of_each_stock)  # 买入1万元
-			print(f'on_timer(): Placing buy order for {stock_code} {get_stock_name(contextInfo, stock_code)} at amount {amount_of_each_stock:.2f}元')
+		for code in T.stocks_to_buy:
+			trade_buy_stock(contextInfo, code, amount_of_each_stock)  # 买入1万元
+			print(f'on_timer(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
 		T.stocks_to_buy = []
 	
 def on_timer_simulate(contextInfo):
@@ -148,34 +148,34 @@ def on_timer_simulate(contextInfo):
 	print()
 	print(f'on_timer_simulate(): start_time={on_timer_simulate.start_time}')
 	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
-	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=T.codes_to_buy_on_market_open, period='tick', start_time=on_timer_simulate.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer_simulate.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
+	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], code=T.codes_to_buy_on_market_open, period='tick', start_time=on_timer_simulate.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer_simulate.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
 	# print(f"on_timer_simulate(): data=\n{data}")
 	# print(f'on_timer_simulate(): data["603938.SH"].index={data["603938.SH"].index}')
 	# print(f'on_timer_simulate(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
 	target_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
 	place_of_buy_time = pd.to_datetime('20251031092453.000', format='%Y%m%d%H%M%S.%f')
-	for stock_code in T.codes_to_buy_on_market_open:
-		if data[stock_code].empty:
-			print(f'on_timer_simulate(): Error! data[{stock_code}] is empty, skip!')
+	for code in T.codes_to_buy_on_market_open:
+		if data[code].empty:
+			print(f'on_timer_simulate(): Error! data[{code}] is empty, skip!')
 			continue
-		time_index = pd.to_datetime(data[stock_code].index, format='%Y%m%d%H%M%S.%f')
+		time_index = pd.to_datetime(data[code].index, format='%Y%m%d%H%M%S.%f')
 		time_index_last = time_index[-1]
 		if time_index_last >= target_time:
 			# 判断该股票的价格
-			last_price = data[stock_code]['lastPrice'].iloc[-1]
+			last_price = data[code]['lastPrice'].iloc[-1]
 			trading_dates = ContextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
 			yesterday_date = trading_dates[-2] if len(trading_dates) >= 2 else '20251102'
-			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, yesterday_date)
-			print(f'on_timer_simulate(): stock_code={stock_code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
-			if to_buy and stock_code not in T.stocks_to_buy:
-				T.stocks_to_buy.append(stock_code)
+			to_buy = trade_is_to_buy(contextInfo, code, last_price, yesterday_date)
+			print(f'on_timer_simulate(): code={code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
+			if to_buy and code not in T.stocks_to_buy:
+				T.stocks_to_buy.append(code)
 	# 下单买入
 	if on_timer_simulate.start_time >= place_of_buy_time and len(T.stocks_to_buy) > 0:
 		amount_of_each_stock = T.capital / len(T.stocks_to_buy)
-		for stock_code in T.stocks_to_buy:
-			trade_buy_stock(contextInfo, stock_code, amount_of_each_stock)  # 买入1万元
-			print(f'on_timer_simulate(): Placing buy order for {stock_code} {get_stock_name(contextInfo, stock_code)} at amount {amount_of_each_stock:.2f}元')
+		for code in T.stocks_to_buy:
+			trade_buy_stock(contextInfo, code, amount_of_each_stock)  # 买入1万元
+			print(f'on_timer_simulate(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
 		T.stocks_to_buy = []
 
 	on_timer_simulate.start_time += pd.Timedelta(seconds=3)
@@ -215,39 +215,39 @@ def handlebar(contextInfo):
 
 def trade_is_to_sell(contextInfo):
 	print(f'trade_is_to_sell(): {T.codes_to_sell}')
-	for stock_code in T.codes_to_sell:
+	for code in T.codes_to_sell:
 		# 获取开盘价
-		market_data = contextInfo.get_market_data_ex(['open'], [stock_code], period='1d', count=1, dividend_type='front', fill_data=True, subscribe=True)
-		open = market_data[stock_code]['open'].iloc[0]
+		market_data = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=True, subscribe=True)
+		open = market_data[code]['open'].iloc[0]
 		# 获取昨日收盘价
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', count=2, dividend_type='front', fill_data=True, subscribe=True)
-		yesterday_close = market_data_yesterday[stock_code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
+		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=True, subscribe=True)
+		yesterday_close = market_data_yesterday[code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
 		# 获取当前的最新价格
-		market_data_current = contextInfo.get_market_data_ex(['lastPrice'], [stock_code], period='tick', count=1, dividend_type='front', fill_data=True, subscribe=True)
-		current = market_data_current[stock_code]['lastPrice'].iloc[0]
+		market_data_current = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=True, subscribe=True)
+		current = market_data_current[code]['lastPrice'].iloc[0]
 		recommendation_date = '20251031'
 		current_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), "%Y%m%d%H%M%S")[:8]
-		up_stop_price = contextInfo.get_instrument_detail(stock_code).get('UpStopPrice')
-		support_line_value = trade_get_support_line_value(contextInfo, stock_code, recommendation_date, current_date)
+		up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
+		support_line_value = trade_get_support_line_value(contextInfo, code, recommendation_date, current_date)
 		# 获取当前时间
 		current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-		print(f'trade_is_to_sell(): stock_code={stock_code} {get_stock_name(contextInfo, stock_code)}, yesterday_close={yesterday_close}, open={open}, current={current}, current_date={current_date}, up_stop_price={up_stop_price}, support_line_value={support_line_value:.2f}, current_time={current_time}')	
+		print(f'trade_is_to_sell(): code={code} {get_stock_name(contextInfo, code)}, yesterday_close={yesterday_close}, open={open}, current={current}, current_date={current_date}, up_stop_price={up_stop_price}, support_line_value={support_line_value:.2f}, current_time={current_time}')	
 		# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 		if open <= support_line_value and open <= yesterday_close * 1.04:
-			print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_at_close.append(stock_code)
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
+			T.stocks_to_sell_at_close.append(code)
 		# 如果低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出
 		if open <= support_line_value and open > yesterday_close * 1.04:
-			print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_at_open.append(stock_code)
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
+			T.stocks_to_sell_at_open.append(code)
 		# 如果高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
 		if open > support_line_value and current <= support_line_value:
-			print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_immediate.append(stock_code)
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
+			T.stocks_to_sell_immediate.append(code)
 		# 如果高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
 		if open > support_line_value and current > support_line_value and current < up_stop_price:
-			print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_at_close.append(stock_code)		
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
+			T.stocks_to_sell_at_close.append(code)		
 	
 	if current_time >= '14:57:00':
 		print(f'trade_is_to_sell(): 当前时间>=14:17:00，卖出以开盘价卖出的股票')
@@ -256,13 +256,13 @@ def trade_is_to_sell(contextInfo):
 			trade_sell_stock(contextInfo, stock)
 		T.stocks_to_sell_at_close = []
 
-def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
+def trade_is_to_buy(contextInfo, code, open_price, yesterday_date):
 	# 使用 yesterday_date 获取昨天收盘价
-	market_data = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', start_time=yesterday_date, end_time=yesterday_date, count=1, dividend_type='front', fill_data=False)
-	if market_data[stock_code].empty:
-		print(f'trade_is_to_buy(): Error! 未获取到{stock_code} {get_stock_name(contextInfo, stock_code)} 的昨日收盘价数据!')
+	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=yesterday_date, end_time=yesterday_date, count=1, dividend_type='front', fill_data=False)
+	if market_data[code].empty:
+		print(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的昨日收盘价数据!')
 		return False
-	yesterday_close = market_data[stock_code]['close'].iloc[0]
+	yesterday_close = market_data[code]['close'].iloc[0]
 	# 获取索引
 	# buy_date_idx = contextInfo.get_date_location(yesterday_date)
 	# 计算今天日期
@@ -276,19 +276,19 @@ def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
 	y = slope * 1 + np.log(yesterday_close * 0.9)
 	support_price = np.exp(y)
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
-	print(f'trade_is_to_buy(): {stock_code} {get_stock_name(contextInfo, stock_code)}, open_price={open_price:.2f}, yesterday_close={yesterday_close:.2f}, support_price={support_price:.2f}, yesterday_close * (1 + BUY_THRESHOLD)={yesterday_close * (1 + BUY_THRESHOLD):.2f}')
+	print(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open_price={open_price:.2f}, yesterday_close={yesterday_close:.2f}, support_price={support_price:.2f}, yesterday_close * (1 + BUY_THRESHOLD)={yesterday_close * (1 + BUY_THRESHOLD):.2f}')
 	return open_price >= support_price and open_price >= yesterday_close * (1 + BUY_THRESHOLD)
 
 def trade_on_buy_signal_check(contextInfo):
 	# print(f'trade_on_buy_signal_check()')	
 	pass
 
-def trade_get_support_line_value(contextInfo, stock_code='600167.SH', recommendation_date='20250923', current_date='20250925'):
+def trade_get_support_line_value(contextInfo, code='600167.SH', recommendation_date='20250923', current_date='20250925'):
 	slope = np.log(1.1095)
 	# 获取从recommendation_date到current_date的收盘价数据
-	market_data = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', start_time=recommendation_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False)
+	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False)
 	# 计算交易日天数，不包括停牌日期
-	closes = market_data[stock_code]['close']
+	closes = market_data[code]['close']
 	trading_days_count = closes.dropna().shape[0]
 	recommendation_close = closes.iloc[0]
 	support_line_value = np.exp((trading_days_count - 1) * slope + np.log(recommendation_close * 0.9))
@@ -808,18 +808,18 @@ def data_download_stock(contextInfo):
 
 	print(f"\n下载完成! 总计: {total_stocks}, 成功: {successful_downloads}, 失败: {failed_downloads}")
 
-def data_load_stock(stock_code, start_date='20150101'):
+def data_load_stock(code, start_date='20150101'):
 	"""直接从数据库加载指定股票数据"""
-	# 转换 stock_code 到 ts_code
-	if not stock_code.endswith(('.SH', '.SZ', '.BJ')):
-		if stock_code.startswith('6'):
-			ts_code = stock_code + '.SH'
-		elif stock_code.startswith(('0', '3')):
-			ts_code = stock_code + '.SZ'
+	# 转换 code 到 ts_code
+	if not code.endswith(('.SH', '.SZ', '.BJ')):
+		if code.startswith('6'):
+			ts_code = code + '.SH'
+		elif code.startswith(('0', '3')):
+			ts_code = code + '.SZ'
 		else:
-			ts_code = stock_code + '.BJ'
+			ts_code = code + '.BJ'
 	else:
-		ts_code = stock_code
+		ts_code = code
 
 	columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '前收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
 	try:
@@ -860,7 +860,7 @@ def data_load_stock(stock_code, start_date='20150101'):
 		df = df.reset_index(drop=True)
 		return df
 	except Exception as e:
-		print(f"从数据库加载股票 {stock_code} 数据失败: {e}")
+		print(f"从数据库加载股票 {code} 数据失败: {e}")
 		return pd.DataFrame(columns=columns)
 	finally:
 		if 'conn' in locals():
