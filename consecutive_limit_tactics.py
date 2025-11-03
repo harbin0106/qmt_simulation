@@ -187,22 +187,22 @@ def after_init(contextInfo):
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
-	return
 	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	# print(f"\nhandlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
+	print()
+	print(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
-	if contextInfo.period != '1m':
-		print(f'handlebar(): Error! contextInfo.period != "1m"! contextInfo.period={contextInfo.period}')
+	if contextInfo.period != 'tick':
+		print(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
 		return
 	# Skip history bars ####################################
-	if not contextInfo.is_last_bar() and False:
-		# print(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
+	if not contextInfo.is_last_bar():
+		print(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
 
-	# 开盘交易逻辑
-	trade_on_market_open(contextInfo)
-	# 检查是否出现了卖出信号
-	trade_on_sell_signal_check(contextInfo)
+	# # 开盘交易逻辑
+	# trade_on_market_open(contextInfo)
+	# # 检查是否出现了卖出信号
+	# trade_on_sell_signal_check(contextInfo)
 
 def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
 	# 使用 yesterday_date 获取昨天收盘价
