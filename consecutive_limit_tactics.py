@@ -100,16 +100,19 @@ def on_timer(contextInfo):
 		return
 	ticks = contextInfo.get_full_tick(T.codes_to_buy_on_market_open)
 	print(f'on_timer(): ticks=\n{ticks}')
-	for stock_code in T.codes_to_buy_on_market_open:
-		print(f"stock_code={stock_code}, lastPrice={ticks[stock_code]['lastPrice']}, timetag={ticks[stock_code]['timetag']}")
 	target_time = pd.to_datetime('09:24:40', format='%H:%M:%S').time()
-	tick_time = pd.to_datetime(ticks[T.codes_to_buy_on_market_open[0]]['timetag'], format='%Y%m%d %H:%M:%S').time()
-	print(f'on_timer(): tick_time={tick_time}, target_time={target_time}')
-	if tick_time >= target_time:
-		print(f'on_timer(): tick_time >= target_time')
-	else:
-		print(f'on_timer(): tick_time < target_time, return')
-		return
+	for stock_code in T.codes_to_buy_on_market_open:
+		last_price = ticks[stock_code]['lastPrice']
+		tick_time = pd.to_datetime(ticks[stock_code]['timetag'], format='%Y%m%d %H:%M:%S').time()
+		print(f"on_timer(): stock_code={stock_code}, last_price={last_price:.2f}, tick_time={tick_time}, target_time={target_time}")
+		if tick_time >= target_time:
+			print(f'on_timer(): tick_time >= target_time, check and buy')
+			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, '20251030')
+			print(f'on_timer_simulate(): stock_code={stock_code}, tick_time={tick_time}, last_price={last_price:.2f}, to_buy={to_buy}')
+			if to_buy and stock_code not in T.stocks_to_buy:
+				T.stocks_to_buy.append(stock_code)
+		else:
+			print(f'on_timer(): tick_time < target_time, waiting')
 	
 def on_timer_simulate(contextInfo):
 	# Use start_time to track the current time for data fetching
