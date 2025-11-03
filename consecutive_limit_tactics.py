@@ -88,19 +88,21 @@ def init(contextInfo):
 	contextInfo.max_position = 0.99
 
 def on_timer(contextInfo):
+	if not hasattr(on_timer, 'stop_timer'):
+		on_timer.stop_timer = False
+	if on_timer.stop_timer:
+		return
 	print()
 	now = datetime.now().strftime("%H%M%S")
 	if now > "092500" and now < "092504":
 		print("集合竞价结束")
+		on_timer.stop_timer = True
 		return
-	# print("=" * 10 ,"集合竞价阶段" , "=" * 10)
 	ticks = contextInfo.get_full_tick(T.codes_to_buy_on_market_open)
 	print(f'on_timer(): ticks=\n{ticks}')
-	print(f"lastPrice={ticks[T.codes_to_buy_on_market_open[0]]['lastPrice']}")
-	print(f"timetag={ticks[T.codes_to_buy_on_market_open[0]]['timetag']}")
-	today_str = date.today().strftime('%Y%m%d ')
-	target_time_str = today_str + '09:24:40'
-	target_time = pd.to_datetime(target_time_str, format='%Y%m%d %H:%M:%S').time()
+	for stock_code in T.codes_to_buy_on_market_open:
+		print(f"stock_code={stock_code}, lastPrice={ticks[stock_code]['lastPrice']}, timetag={ticks[stock_code]['timetag']}")
+	target_time = pd.to_datetime('09:24:40', format='%H:%M:%S').time()
 	tick_time = pd.to_datetime(ticks[T.codes_to_buy_on_market_open[0]]['timetag'], format='%Y%m%d %H:%M:%S').time()
 	print(f'on_timer(): tick_time={tick_time}, target_time={target_time}')
 	if tick_time >= target_time:
