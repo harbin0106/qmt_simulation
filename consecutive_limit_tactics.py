@@ -88,31 +88,53 @@ def init(contextInfo):
 	contextInfo.max_position = 0.99
 
 def on_timer(contextInfo):
+	print()
+	now = datetime.now().strftime("%H%M%S")
+	if now > "092500" and now < "092504":
+		print("集合竞价结束")
+		return
+	# print("=" * 10 ,"集合竞价阶段" , "=" * 10)
+	ticks = contextInfo.get_full_tick(T.codes_to_buy_on_market_open)
+	print(f'on_timer(): ticks=\n{ticks}')
+	print(f"lastPrice={ticks[T.codes_to_buy_on_market_open[0]]['lastPrice']}")
+	print(f"timetag={ticks[T.codes_to_buy_on_market_open[0]]['timetag']}")
+	today_str = date.today().strftime('%Y%m%d ')
+	target_time_str = today_str + '09:24:40'
+	target_time = pd.to_datetime(target_time_str, format='%Y%m%d %H:%M:%S').time()
+	tick_time = pd.to_datetime(ticks[T.codes_to_buy_on_market_open[0]]['timetag'], format='%Y%m%d %H:%M:%S').time()
+	print(f'on_timer(): tick_time={tick_time}, target_time={target_time}')
+	if tick_time >= target_time:
+		print(f'on_timer(): tick_time >= target_time')
+	else:
+		print(f'on_timer(): tick_time < target_time, return')
+		return
+	
+def on_timer_simulate(contextInfo):
 	# Use start_time to track the current time for data fetching
-	if not hasattr(on_timer, 'start_time'):
-		on_timer.start_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
-	if not hasattr(on_timer, 'stop_timer'):
-		on_timer.stop_timer = False
-	if on_timer.stop_timer:
+	if not hasattr(on_timer_simulate, 'start_time'):
+		on_timer_simulate.start_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
+	if not hasattr(on_timer_simulate, 'stop_timer'):
+		on_timer_simulate.stop_timer = False
+	if on_timer_simulate.stop_timer:
 		return
 	stop_timer_time = pd.to_datetime('2025103109256.000', format='%Y%m%d%H%M%S.%f')
-	if on_timer.start_time >= stop_timer_time:
-		print(f'on_timer(): on_timer.start_time >= stop_timer_time, stopping timer.')
-		on_timer.stop_timer = True
+	if on_timer_simulate.start_time >= stop_timer_time:
+		print(f'on_timer_simulate(): on_timer_simulate.start_time >= stop_timer_time, stopping timer.')
+		on_timer_simulate.stop_timer = True
 		return
-	print()	
-	print(f'on_timer(): start_time={on_timer.start_time}')
+	print()
+	print(f'on_timer_simulate(): start_time={on_timer_simulate.start_time}')
 	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
-	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=T.codes_to_buy_on_market_open, period='tick', start_time=on_timer.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
-	# print(f"on_timer(): data=\n{data}")
-	# print(f'on_timer(): data["603938.SH"].index={data["603938.SH"].index}')
-	# print(f'on_timer(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
+	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], stock_code=T.codes_to_buy_on_market_open, period='tick', start_time=on_timer_simulate.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer_simulate.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
+	# print(f"on_timer_simulate(): data=\n{data}")
+	# print(f'on_timer_simulate(): data["603938.SH"].index={data["603938.SH"].index}')
+	# print(f'on_timer_simulate(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
 	target_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
 	place_of_buy_time = pd.to_datetime('20251031092453.000', format='%Y%m%d%H%M%S.%f')
 	for stock_code in T.codes_to_buy_on_market_open:
 		if data[stock_code].empty:
-			print(f'on_timer(): Error! data[{stock_code}] is empty, skip!')
+			print(f'on_timer_simulate(): Error! data[{stock_code}] is empty, skip!')
 			continue
 		time_index = pd.to_datetime(data[stock_code].index, format='%Y%m%d%H%M%S.%f')
 		time_index_last = time_index[-1]
@@ -120,18 +142,18 @@ def on_timer(contextInfo):
 			# 判断该股票的价格
 			last_price = data[stock_code]['lastPrice'].iloc[-1]
 			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, '20251030')
-			print(f'on_timer(): stock_code={stock_code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
+			print(f'on_timer_simulate(): stock_code={stock_code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
 			if to_buy and stock_code not in T.stocks_to_buy:
 				T.stocks_to_buy.append(stock_code)
 	# 下单买入
-	if on_timer.start_time >= place_of_buy_time and len(T.stocks_to_buy) > 0:
+	if on_timer_simulate.start_time >= place_of_buy_time and len(T.stocks_to_buy) > 0:
 		amount_of_each_stock = T.capital / len(T.stocks_to_buy)
 		for stock_code in T.stocks_to_buy:
 			trade_buy_stock(contextInfo, stock_code, amount_of_each_stock)  # 买入1万元
-			print(f'on_timer(): Placing buy order for {stock_code} {get_stock_name(contextInfo, stock_code)} at amount {amount_of_each_stock:.2f}元')
+			print(f'on_timer_simulate(): Placing buy order for {stock_code} {get_stock_name(contextInfo, stock_code)} at amount {amount_of_each_stock:.2f}元')
 		T.stocks_to_buy = []
 
-	on_timer.start_time += pd.Timedelta(seconds=3)
+	on_timer_simulate.start_time += pd.Timedelta(seconds=3)
 
 
 def after_init(contextInfo):
