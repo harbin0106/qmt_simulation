@@ -72,6 +72,9 @@ def init(contextInfo):
 	T.start_time_str = '20251031092000'
 	T.capital = 100000
 	T.stocks_to_buy = []
+	T.stocks_to_sell_at_close = []
+	T.stocks_to_sell_at_open = []
+	T.stocks_to_sell_immediate = []
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
 	today = date.today()
@@ -187,21 +190,21 @@ def after_init(contextInfo):
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
+	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
+	print()
+	# print(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
+	# Validate period
+	if contextInfo.period != 'tick':
+		# print(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
+		return
+	# Skip history bars ####################################
+	if not contextInfo.is_last_bar():
+		# print(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
+		return
 	trade_is_to_sell(contextInfo)
 	return
 	trade_get_support_line_value(contextInfo)
 	return;
-	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	print()
-	print(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
-	# Validate period
-	if contextInfo.period != 'tick':
-		print(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
-		return
-	# Skip history bars ####################################
-	if not contextInfo.is_last_bar() and False:
-		print(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
-		return
 
 	# # 开盘交易逻辑
 	# trade_on_market_open(contextInfo)
@@ -215,8 +218,39 @@ def trade_is_to_sell(contextInfo, stock_code='603686.SH'):
 	# 获取昨日收盘价
 	market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', count=2, dividend_type='front', fill_data=True, subscribe=True)
 	yesterday_close = market_data_yesterday[stock_code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
-	print(f'trade_is_to_sell(): stock_code={stock_code} {get_stock_name(contextInfo, stock_code)}, yesterday_close={yesterday_close}, open={open}')
+	# 获取当前的最新价格
+	market_data_current = contextInfo.get_market_data_ex(['lastPrice'], [stock_code], period='tick', count=1, dividend_type='front', fill_data=True, subscribe=True)
+	current = market_data_current[stock_code]['lastPrice'].iloc[0]
+	recommendation_date = '20251031'
+	current_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), "%Y%m%d%H%M%S")[:8]
+	up_stop_price = contextInfo.get_instrument_detail(stock_code).get('UpStopPrice')
+	support_line_value = trade_get_support_line_value(contextInfo, stock_code, recommendation_date, current_date)
+	# 获取当前时间
+	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
+	print(f'trade_is_to_sell(): stock_code={stock_code} {get_stock_name(contextInfo, stock_code)}, yesterday_close={yesterday_close}, open={open}, current={current}, current_date={current_date}, up_stop_price={up_stop_price}, support_line_value={support_line_value:.2f}, current_time={current_time}')	
 	# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
+	if open <= support_line_value and open <= yesterday_close * 1.04:
+		print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
+		T.stocks_to_sell_at_close.append(stock_code)
+	# 如果低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出
+	if open <= support_line_value and open > yesterday_close * 1.04:
+		print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
+		T.stocks_to_sell_at_open.append(stock_code)
+	# 如果高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
+	if open > support_line_value and current <= support_line_value:
+		print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
+		T.stocks_to_sell_immediate.append(stock_code)
+	# 如果高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
+	if open > support_line_value and current > support_line_value and current < up_stop_price:
+		print(f'trade_is_to_sell(): {stock_code} {get_stock_name(contextInfo, stock_code)} 满足卖出条件，卖出')
+		T.stocks_to_sell_at_close.append(stock_code)		
+	
+	if current_time >= '14:57:00':
+		print(f'trade_is_to_sell(): 当前时间>=14:17:00，卖出以开盘价卖出的股票')
+		# 卖出以收盘价卖出的股票
+		for stock in T.stocks_to_sell_at_close:
+			trade_sell_stock(contextInfo, stock)
+		T.stocks_to_sell_at_close = []
 
 def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
 	# 使用 yesterday_date 获取昨天收盘价
