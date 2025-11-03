@@ -41,7 +41,7 @@ def init(contextInfo):
 				break
 	print(f'T.codes_to_sell={T.codes_to_sell}')
 	# 读取 JSON 文件获取买入股票代码
-	with open('C:/a/trade/量化/中信证券/code/tushare20251030-20251102T200601.json', 'r', encoding='utf-8') as f:
+	with open('C:/a/trade/量化/中信证券/code/tushare20251031-20251103T133416.json', 'r', encoding='utf-8') as f:
 		data = json.load(f)
 	T.codes_to_buy_on_market_open = []
 	for stock in data['stocks']:
@@ -187,7 +187,9 @@ def after_init(contextInfo):
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
-	trade_get_support_line_value(contextInfo, '603938.SH', '20251031', '20251103')
+	trade_is_to_sell(contextInfo)
+	return
+	trade_get_support_line_value(contextInfo)
 	return;
 	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	print()
@@ -205,6 +207,13 @@ def handlebar(contextInfo):
 	# trade_on_market_open(contextInfo)
 	# # 检查是否出现了卖出信号
 	trade_on_sell_signal_check(contextInfo)
+
+def trade_is_to_sell(contextInfo, stock_code='603686.SH'):
+	# 获取开盘价
+	market_data = contextInfo.get_market_data_ex(['open'], [stock_code], period='1d', count=1, dividend_type='front', fill_data=True, subscribe=True)
+	open = market_data[stock_code]['open'].iloc[0]
+	print(f'trade_is_to_sell(): stock_code={stock_code} open={open}')
+	# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 
 def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
 	# 使用 yesterday_date 获取昨天收盘价
@@ -233,10 +242,7 @@ def trade_on_buy_signal_check(contextInfo):
 	# print(f'trade_on_buy_signal_check()')	
 	pass
 
-def trade_get_support_line_value(contextInfo, stock_code, recommendation_date, current_date):
-	recommendation_date = '20250923'
-	current_date = '20250925'
-	stock_code = '600167.SH'
+def trade_get_support_line_value(contextInfo, stock_code='600167.SH', recommendation_date='20250923', current_date='20250925'):
 	slope = np.log(1.1095)
 	# 获取从recommendation_date到current_date的收盘价数据
 	market_data = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', start_time=recommendation_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False)
