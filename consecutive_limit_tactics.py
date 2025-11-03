@@ -93,31 +93,39 @@ def on_timer(contextInfo):
 	if on_timer.stop_timer:
 		return
 	print()
-	now = datetime.now().strftime("%H%M%S")
-	if now > "092500" and now < "092504":
+	current_time = datetime.now().strftime("%H:%M:%S")
+	stop_timer_time1 = "09:25:00"
+	check_price_time = "09:24:45"
+	buy_stock_time = "09:24:53"
+	print(f'on_timer(): current_time={current_time}')
+	if current_time > stop_timer_time1:
 		print("集合竞价结束")
 		on_timer.stop_timer = True
 		return
+	# Do not check prices before check_price_time
+	if current_time < check_price_time:
+		return
+
 	ticks = contextInfo.get_full_tick(T.codes_to_buy_on_market_open)
-	print(f'on_timer(): ticks=\n{ticks}')
-	target_time = pd.to_datetime('09:24:40', format='%H:%M:%S').time()
+	# print(f'on_timer(): ticks=\n{ticks}')
 	for stock_code in T.codes_to_buy_on_market_open:
 		last_price = ticks[stock_code]['lastPrice']
-		tick_time = pd.to_datetime(ticks[stock_code]['timetag'], format='%Y%m%d %H:%M:%S').time()
-		print(f"on_timer(): stock_code={stock_code}, last_price={last_price:.2f}, tick_time={tick_time}, target_time={target_time}")
-		if tick_time >= target_time or True:
-			print(f'on_timer(): tick_time >= target_time, check and buy')
-			trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
-			if len(trading_dates) < 2:
-				print(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
-				continue
-			yesterday_date = trading_dates[-2]
-			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, yesterday_date)
-			print(f'on_timer(): stock_code={stock_code}, tick_time={tick_time}, last_price={last_price:.2f}, to_buy={to_buy}, yesterday_date={yesterday_date}')
-			if to_buy and stock_code not in T.stocks_to_buy:
-				T.stocks_to_buy.append(stock_code)
-		else:
-			print(f'on_timer(): tick_time < target_time, waiting')
+		trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
+		if len(trading_dates) < 2:
+			print(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+			continue
+		yesterday_date = trading_dates[-2]
+		to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, yesterday_date)
+		print(f'on_timer(): stock_code={stock_code} {get_stock_name(contextInfo, stock_code)}, current_time={current_time}, last_price={last_price:.2f}, yesterday_date={yesterday_date}, to_buy={to_buy}')
+		if to_buy and stock_code not in T.stocks_to_buy:
+			T.stocks_to_buy.append(stock_code)
+	# 下单买入
+	if current_time >= buy_stock_time and len(T.stocks_to_buy) > 0:
+		amount_of_each_stock = T.capital / len(T.stocks_to_buy)
+		for stock_code in T.stocks_to_buy:
+			trade_buy_stock(contextInfo, stock_code, amount_of_each_stock)  # 买入1万元
+			print(f'on_timer(): Placing buy order for {stock_code} {get_stock_name(contextInfo, stock_code)} at amount {amount_of_each_stock:.2f}元')
+		T.stocks_to_buy = []
 	
 def on_timer_simulate(contextInfo):
 	# Use start_time to track the current time for data fetching
@@ -166,7 +174,6 @@ def on_timer_simulate(contextInfo):
 		T.stocks_to_buy = []
 
 	on_timer_simulate.start_time += pd.Timedelta(seconds=3)
-
 
 def after_init(contextInfo):
 	print(f'after_init()')
