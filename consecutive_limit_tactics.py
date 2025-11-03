@@ -212,7 +212,10 @@ def trade_is_to_sell(contextInfo, stock_code='603686.SH'):
 	# 获取开盘价
 	market_data = contextInfo.get_market_data_ex(['open'], [stock_code], period='1d', count=1, dividend_type='front', fill_data=True, subscribe=True)
 	open = market_data[stock_code]['open'].iloc[0]
-	print(f'trade_is_to_sell(): stock_code={stock_code} open={open}')
+	# 获取昨日收盘价
+	market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock_code], period='1d', count=2, dividend_type='front', fill_data=True, subscribe=True)
+	yesterday_close = market_data_yesterday[stock_code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
+	print(f'trade_is_to_sell(): stock_code={stock_code} {get_stock_name(contextInfo, stock_code)}, yesterday_close={yesterday_close}, open={open}')
 	# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 
 def trade_is_to_buy(contextInfo, stock_code, open_price, yesterday_date):
