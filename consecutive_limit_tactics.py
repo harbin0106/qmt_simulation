@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 import talib
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 import sqlite3
 import time
 import json
@@ -105,10 +105,15 @@ def on_timer(contextInfo):
 		last_price = ticks[stock_code]['lastPrice']
 		tick_time = pd.to_datetime(ticks[stock_code]['timetag'], format='%Y%m%d %H:%M:%S').time()
 		print(f"on_timer(): stock_code={stock_code}, last_price={last_price:.2f}, tick_time={tick_time}, target_time={target_time}")
-		if tick_time >= target_time:
+		if tick_time >= target_time or True:
 			print(f'on_timer(): tick_time >= target_time, check and buy')
-			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, '20251030')
-			print(f'on_timer_simulate(): stock_code={stock_code}, tick_time={tick_time}, last_price={last_price:.2f}, to_buy={to_buy}')
+			trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
+			if len(trading_dates) < 2:
+				print(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+				continue
+			yesterday_date = trading_dates[-2]
+			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, yesterday_date)
+			print(f'on_timer(): stock_code={stock_code}, tick_time={tick_time}, last_price={last_price:.2f}, to_buy={to_buy}, yesterday_date={yesterday_date}')
 			if to_buy and stock_code not in T.stocks_to_buy:
 				T.stocks_to_buy.append(stock_code)
 		else:
@@ -146,7 +151,9 @@ def on_timer_simulate(contextInfo):
 		if time_index_last >= target_time:
 			# 判断该股票的价格
 			last_price = data[stock_code]['lastPrice'].iloc[-1]
-			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, '20251030')
+			trading_dates = ContextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
+			yesterday_date = trading_dates[-2] if len(trading_dates) >= 2 else '20251102'
+			to_buy = trade_is_to_buy(contextInfo, stock_code, last_price, yesterday_date)
 			print(f'on_timer_simulate(): stock_code={stock_code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
 			if to_buy and stock_code not in T.stocks_to_buy:
 				T.stocks_to_buy.append(stock_code)
