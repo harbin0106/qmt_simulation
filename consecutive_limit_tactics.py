@@ -25,32 +25,9 @@ def init(contextInfo):
 
 	T.codes_all = list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys()))
 	log(f'init(): T.codes_all=\n{T.codes_all}')
+	init_trade_parameters(contextInfo)
 	return
-	# 操作类型：23-股票买入，24-股票卖出
-	T.opType_buy = 23
-	# 操作类型：23-股票买入，24-股票卖出
-	T.opType_sell = 24
-	# 单股、单账号、普通、股/手方式下单
-	T.orderType_volume = 1101
-	# 单股、单账号、普通、金额方式下单
-	T.orderType_amount = 1102
-	# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 6：买1价 7：买2价（组合不支持）8：买3价（组合不支持） 9：买4价（组合不支持）10：买5价（组合不支持）11：（指定价）模型价（只对单股情况支持,对组合交易不支持）12：涨跌停价 13：挂单价 14：对手价
-	T.prType_sell_1 = 4
-	T.prType_buy_1 = 6
-	T.prType_designated = 11
-	T.volume = 100
-	T.strategyName = 'consecutive_limit_tactics'
-	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
-	T.quickTrade = 2 	
-	T.userOrderId = '投资备注'
-	T.price_invalid = -1
-	T.capital = 100000
-	T.codes_to_buy = []
-	T.codes_to_sell_at_close = []
-	T.codes_to_sell_at_open = []
-	T.codes_to_sell_immediate = []
-	contextInfo.set_universe(T.codes_all)
-	contextInfo.set_account(T.accountid)
+
 	today = date.today()
 	# log(f'today={today}')
 	startTime = today.strftime('%Y-%m-%d') + ' 09:15:00'
@@ -105,6 +82,33 @@ def init_load_recommendationsFromDB(contextInfo):
 		T.codes_recommendated[df.code]['r_date'] = df.r_date
 	T.codes_to_sell = T.codes_recommendated.copy()
 	log(f'init_load_recommendationsFromDB(): yesterday_date={yesterday_date}, T.codes_recommendated=\n{T.codes_recommendated}')
+
+def init_trade_parameters(contextInfo):
+	# 操作类型：23-股票买入，24-股票卖出
+	T.opType_buy = 23
+	# 操作类型：23-股票买入，24-股票卖出
+	T.opType_sell = 24
+	# 单股、单账号、普通、股/手方式下单
+	T.orderType_volume = 1101
+	# 单股、单账号、普通、金额方式下单
+	T.orderType_amount = 1102
+	# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 6：买1价 7：买2价（组合不支持）8：买3价（组合不支持） 9：买4价（组合不支持）10：买5价（组合不支持）11：（指定价）模型价（只对单股情况支持,对组合交易不支持）12：涨跌停价 13：挂单价 14：对手价
+	T.prType_sell_1 = 4
+	T.prType_buy_1 = 6
+	T.prType_designated = 11
+	T.volume = 100
+	T.strategyName = 'consecutive_limit_tactics'
+	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
+	T.quickTrade = 2 	
+	T.userOrderId = '投资备注'
+	T.price_invalid = -1
+	T.capital = 100000
+	T.codes_to_buy = []
+	T.codes_to_sell_at_close = []
+	T.codes_to_sell_at_open = []
+	T.codes_to_sell_immediate = []
+	contextInfo.set_universe(T.codes_all)
+	contextInfo.set_account(T.accountid)
 
 def on_timer(contextInfo):
 	if not hasattr(on_timer, 'stop_timer'):
