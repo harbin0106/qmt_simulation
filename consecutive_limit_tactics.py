@@ -6,7 +6,6 @@ from datetime import datetime, date, time, timedelta
 from dateutil.relativedelta import relativedelta
 import sqlite3
 import time
-# import json
 from xtquant import xtdata
 # Global trade variables
 class T():
@@ -14,6 +13,8 @@ class T():
 T = T()
 
 def init(contextInfo):
+	log('=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
+	db_init()
 	T.codes_all = ['603938.SH', '301468.SZ']
 	T.accountid_type = 'STOCK'
 	T.accountid = '100200109'	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
@@ -580,6 +581,23 @@ def log(*args):
 	message = ' '.join(str(arg) for arg in args)
 	with open(r'C:\a\trade\量化\中信证券\code\QMT.txt', 'a', encoding='utf-8') as f:
 		f.write(message + '\n')
+
+def db_init():
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('''
+	CREATE TABLE IF NOT EXISTS stock_status (
+		code TEXT PRIMARY KEY,
+		name TEXT,
+		r_date TEXT,
+		b_date TEXT,
+		b_price REAL,
+		s_date TEXT,
+		s_price REAL
+	)
+	''')
+	conn.commit()
+	conn.close()
 
 def data_init_db():
 	"""初始化股票SQLite数据库"""
