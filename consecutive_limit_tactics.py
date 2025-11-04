@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import talib
 from datetime import datetime, date, time, timedelta
+from dateutil.relativedelta import relativedelta
 import sqlite3
 import time
 # import json
@@ -765,8 +766,8 @@ def data_download_stock(contextInfo):
 	获取所有A股（沪深京）的股票代码列表，并保存到数据库。
 	使用QMT接口。
 	"""
-	start_date = '20200101'
-	end_date = '20251031'
+	end_date = date.today().strftime('%Y%m%d')
+	start_date = (date.today() - relativedelta(months=1)).strftime('%Y%m%d')
 	# base_delay = 1
 
 	# 初始化数据库
@@ -783,7 +784,6 @@ def data_download_stock(contextInfo):
 	failed_downloads = 0
 
 	for i, ts_code in enumerate(all_codes):
-
 		success = False
 		for attempt in range(3):  # 最多重试3次
 			try:
@@ -815,15 +815,9 @@ def data_load_stock(code, start_date='20200101'):
 	"""直接从数据库加载指定股票数据"""
 	# 转换 code 到 ts_code
 	if not code.endswith(('.SH', '.SZ', '.BJ')):
-		if code.startswith('6'):
-			ts_code = code + '.SH'
-		elif code.startswith(('0', '3')):
-			ts_code = code + '.SZ'
-		else:
-			ts_code = code + '.BJ'
-	else:
-		ts_code = code
-
+		print(f'data_load_stock(): Error! 股票代码 {code} 格式不正确，缺少市场后缀(.SH/.SZ/.BJ)')
+		return pd.DataFrame()
+	ts_code = code
 	columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '前收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
 	try:
 		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
