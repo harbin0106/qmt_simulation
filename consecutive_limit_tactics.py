@@ -15,71 +15,21 @@ T = T()
 def init(contextInfo):
 	log('=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
 	db_init()
-	T.codes_all = ['603938.SH', '301468.SZ']
+	T.codes_all = []
 	T.accountid_type = 'STOCK'
-	T.accountid = '100200109'	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
-	# 获取持仓股票代码并加入T.codes_to_sell，仅加载沪深主板股票
-	# T.codes_to_sell = []
-	# positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-	# i = 0
-	# for dt in positions:
-	# 	full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-	# 	# 仅加载沪深主板股票：上海主板（600000-603999.SH）和深圳主板（000001-000999.SZ）
-	# 	is_main_board = (
-	# 		(dt.m_strInstrumentID.startswith('6') and not dt.m_strInstrumentID.startswith('688') and dt.m_strExchangeID == 'SH') or
-	# 		(dt.m_strInstrumentID.startswith('000') and dt.m_strExchangeID == 'SZ')
-	# 	)
-	# 	if full_code not in T.codes_to_sell and is_main_board:
-	# 		T.codes_to_sell.append(full_code)
-	# 		i += 1
-	# 		if i >= 3:
-	# 			break
-	# log(f'T.codes_to_sell={T.codes_to_sell}')
-	# 从Excel文件中读取report_df
-	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-03T13-34-16.xlsx', sheet_name='Report')
-	# 按照日期从小到大排序
-	report_df = report_df.sort_values(by='指定日期T', ascending=True)
-	# 去掉不需要的列
-	report_df = report_df.drop(columns=['T+1增加率', 'T+2增加率', 'T+3增加率', 'T+4增加率', 'T+5增加率'])
-	log(f'report_df: \n{report_df}')
+	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
+	T.accountid = 'T10100002555'	
+	init_load_codes_in_position(contextInfo)
+	init_load_recommendationsFromExcel(contextInfo)
+	init_load_recommendationsFromDB(contextInfo)
 
-	# 从report_df获取股票代码
-	T.codes_to_buy_on_market_open = list(report_df['股票代码'].unique())
-	T.codes_to_sell = report_df
-	# log(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
-
-	# 保存股票状态到数据库
-	for _, row in report_df.iterrows():
-		code = row['股票代码']
-		name = row['股票名称']
-		r_date = str(row['指定日期T'])
-		db_save_stock_status(code, name, r_date, None, None, None, None)
-
-	# 获取上一个交易日
-	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 3, '1d')
-	if len(trading_dates) != 3:
-		log(f'init(): Error! 未获取到交易日期数据 for stock 000001.SH!')
-		return
-	yesterday_date = trading_dates[0]
-	log(f'yesterday_date={yesterday_date}')
-	# 从数据库加载上一个交易日的数据
-	df_all = db_load_all()
-	T.codes_to_sell = df_all[df_all['r_date'] == yesterday_date].copy()
-	T.codes_to_sell = T.codes_to_sell.rename(columns={'code': '股票代码', 'name': '股票名称', 'r_date': '指定日期T'})
-	# 按照日期从小到大排序
-	T.codes_to_sell = T.codes_to_sell.sort_values(by='指定日期T', ascending=True)
-	log(f'T.codes_to_sell: \n{T.codes_to_sell}')
-
-	# 从T.codes_to_sell获取股票代码
-	T.codes_to_buy_on_market_open = list(T.codes_to_sell['股票代码'].unique())
-	# log(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
-
-	T.codes_all.extend(T.codes_to_buy_on_market_open)
-	T.codes_all = list(set(T.codes_all))
-	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
-	T.codes_all.extend(list(T.codes_to_sell['股票代码'].unique()))
-	T.codes_all = list(set(T.codes_all))
-	# log(f'T.codes_all={T.codes_all}')
+	# T.codes_all.extend(T.codes_recommendated)
+	# T.codes_all.concat(T.codes_in_position)
+	# T.codes_all = list(set(T.codes_all))
+	# T.codes_all.extend(list(T.codes_in_position))
+	# T.codes_all = list(set(T.codes_all))
+	log(f'init(): T.codes_all=\n{T.codes_all}')
+	return
 	# 操作类型：23-股票买入，24-股票卖出
 	T.opType_buy = 23
 	# 操作类型：23-股票买入，24-股票卖出
@@ -117,6 +67,50 @@ def init(contextInfo):
 	contextInfo.max_single_order = 10000
 	contextInfo.max_position = 0.99
 
+def init_load_codes_in_position(contextInfo):
+	# 获取持仓股票代码并加入T.codes_in_position
+	T.codes_in_position = {}
+	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	for dt in positions:
+		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		if full_code not in T.codes_in_position:
+			T.codes_in_position[full_code] = get_stock_name(contextInfo, full_code)
+	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
+
+def init_load_recommendationsFromExcel(contextInfo):
+	# 从Excel文件中读取report_df
+	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-03T13-34-16.xlsx', sheet_name='Report')
+	# 按照日期从小到大排序
+	report_df = report_df.sort_values(by='指定日期T', ascending=True)
+	# 去掉不需要的列
+	report_df = report_df.drop(columns=['T+1增加率', 'T+2增加率', 'T+3增加率', 'T+4增加率', 'T+5增加率'])
+	log(f'init_load_recommendationsFromExcel(): report_df=\n{report_df}')
+	# 保存股票状态到数据库
+	for _, row in report_df.iterrows():
+		code = row['股票代码']
+		name = row['股票名称']
+		r_date = str(row['指定日期T'])
+		db_save_stock_status(code, name, r_date, None, None, None, None)
+
+def init_load_recommendationsFromDB(contextInfo):
+	T.codes_recommendated = {}
+	# 获取上一个交易日
+	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 3, '1d')
+	if len(trading_dates) != 3:
+		log(f'init(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+		return
+	yesterday_date = trading_dates[0]
+	log(f'init_load_recommendationsFromDB(): yesterday_date={yesterday_date}')
+	# 从数据库加载上一个交易日的推荐股票
+	df_all = db_load_all()
+	df_filtered = df_all[df_all['r_date'] == yesterday_date]
+	for df in df_filtered.itertuples():
+		T.codes_recommendated[df.code] = {}
+		T.codes_recommendated[df.code]['name'] = df.name
+		T.codes_recommendated[df.code]['r_date'] = df.r_date
+	T.codes_to_sell = T.codes_recommendated.copy()
+	log(f'init_load_recommendationsFromDB(): T.codes_recommendated=\n{T.codes_recommendated}')
+
 def on_timer(contextInfo):
 	if not hasattr(on_timer, 'stop_timer'):
 		on_timer.stop_timer = False
@@ -134,9 +128,9 @@ def on_timer(contextInfo):
 	if current_time < CHECK_PRICE_TIME:
 		return
 	log(f'on_timer(): current_time={current_time}')
-	ticks = contextInfo.get_full_tick(T.codes_to_buy_on_market_open)
+	ticks = contextInfo.get_full_tick(T.codes_recommendated)
 	# log(f'on_timer(): ticks=\n{ticks}')
-	for code in T.codes_to_buy_on_market_open:
+	for code in T.codes_recommendated:
 		last_price = ticks[code]['lastPrice']
 		trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
 		if len(trading_dates) < 2:
@@ -171,14 +165,14 @@ def on_timer_simulate(contextInfo):
 	log()
 	log(f'on_timer_simulate(): start_time={on_timer_simulate.start_time}')
 	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
-	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], code=T.codes_to_buy_on_market_open, period='tick', start_time=on_timer_simulate.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer_simulate.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
+	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], code=T.codes_recommendated, period='tick', start_time=on_timer_simulate.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer_simulate.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
 	# log(f"on_timer_simulate(): data=\n{data}")
 	# log(f'on_timer_simulate(): data["603938.SH"].index={data["603938.SH"].index}')
 	# log(f'on_timer_simulate(): data["603938.SH"].index[-1]={data["603938.SH"].index[-1]}')
 	# 将索引转换为时间变量
 	target_time = pd.to_datetime('20251031092440.000', format='%Y%m%d%H%M%S.%f')
 	place_of_buy_time = pd.to_datetime('20251031092453.000', format='%Y%m%d%H%M%S.%f')
-	for code in T.codes_to_buy_on_market_open:
+	for code in T.codes_recommendated:
 		if data[code].empty:
 			log(f'on_timer_simulate(): Error! data[{code}] is empty, skip!')
 			continue
@@ -216,6 +210,7 @@ def after_init(contextInfo):
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
+	return
 	# bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# log(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
@@ -488,7 +483,7 @@ def trade_on_market_open(contextInfo):
 
 	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# log(f'trade_on_market_open(): start_time={start_time}, contextInfo.barpos={contextInfo.barpos}')
-	for stock in T.codes_to_buy_on_market_open:
+	for stock in T.codes_recommendated:
 		# 获取开盘价 (1分钟K线，count=-1，取09:30:00的开盘价)
 		market_data = contextInfo.get_market_data_ex(['open'], [stock], period='1m', count=1, start_time=bar_time, end_time=bar_time, dividend_type='front', fill_data=False)
 		# log(f'trade_on_market_open(): market_data={market_data}')
