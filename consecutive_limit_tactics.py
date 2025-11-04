@@ -70,7 +70,6 @@ def init(contextInfo):
 	T.quickTrade = 2 	
 	T.userOrderId = '投资备注'
 	T.price_invalid = -1
-	T.start_time_str = '20251031092000'
 	T.capital = 100000
 	T.codes_to_buy = []
 	T.codes_to_sell_at_close = []
@@ -82,8 +81,7 @@ def init(contextInfo):
 	# print(f'today={today}')
 	startTime = today.strftime('%Y-%m-%d') + ' 09:15:00'
 	# For testing only
-	startTime = "2025-10-31 09:15:00"
-	# print(f"startTime={startTime}")
+	# startTime = "2025-10-31 09:15:00"
 	contextInfo.run_time("on_timer", "3nSecond", startTime)
 	return
 	contextInfo.set_slippage(1, 0.003)
@@ -97,10 +95,10 @@ def on_timer(contextInfo):
 	if on_timer.stop_timer:
 		return
 	current_time = datetime.now().strftime("%H:%M:%S")
-	stop_timer_time1 = "09:25:00"
-	check_price_time = "09:24:45"
-	buy_stock_time = "09:24:53"
-	if current_time > stop_timer_time1:
+	stop_timer_time = "09:25:00"
+	check_price_time = "09:24:00"
+	buy_stock_time = "09:24:20"
+	if current_time > stop_timer_time:
 		print("集合竞价结束")
 		on_timer.stop_timer = True
 		return
