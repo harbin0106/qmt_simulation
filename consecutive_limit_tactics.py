@@ -23,9 +23,8 @@ def init(contextInfo):
 	T.codes_all = list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys()))
 	log(f'init(): T.codes_all=\n{T.codes_all}')
 	contextInfo.set_universe(T.codes_all)
-	contextInfo.set_account(T.accountid)	
-	return
-
+	contextInfo.set_account(T.accountid)
+	# Start the opening call auction timer
 	today = date.today()
 	# log(f'today={today}')
 	startTime = today.strftime('%Y-%m-%d') + ' 09:15:00'
@@ -119,7 +118,7 @@ def on_timer(contextInfo):
 	CHECK_PRICE_TIME = "09:24:00"
 	BUY_STOCK_TIME = "09:24:20"
 	if current_time > STOP_TIMER_TIME:
-		log("集合竞价结束")
+		log("on_timer(): 集合竞价结束")
 		on_timer.stop_timer = True
 		return
 	# Do not check prices before CHECK_PRICE_TIME
