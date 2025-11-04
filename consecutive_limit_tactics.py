@@ -400,7 +400,7 @@ def trade_sell_stock(contextInfo, stock):
 		return
 	volume = 100  # 测试时先卖100股
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, stock, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-	log(f'trade_sell_stock(): 卖出 {volume} 股')
+	log(f'trade_sell_stock(): 卖出 {volume} 股 (测试时先卖100股)')
 
 def trade_buy_stock_at_up_stop_price(contextInfo, stock, buy_amount):
 	log(f'trade_buy_stock_at_up_stop_price(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
@@ -524,23 +524,14 @@ def order_callback(contextInfo, orderInfo):
 	# log(f'order_callback(): {stock} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
-		log(f'order_callback(): 委托已全部成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}')
+		log(f'order_callback(): 委托已全部成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
 	elif orderInfo.m_nOrderStatus == 55:  # 部成
-		log(f'order_callback(): 委托部分成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}')
+		log(f'order_callback(): 委托部分成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
 	elif orderInfo.m_nOrderStatus == 54:  # 已撤
 		log(f'order_callback(): 委托已撤销 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}')
 	else:
 		return
 		# log(f'order_callback(): 委托状态更新 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 状态: {orderInfo.m_nOrderStatus}')
-	# # 打印所有成员变量的内容
-	# log('order_callback(): All attributes of orderInfo:')
-	# for attr in dir(orderInfo):
-	# 	if not attr.startswith('_'):
-	# 		try:
-	# 			value = getattr(orderInfo, attr)
-	# 			log(f'  {attr}: {value}')
-	# 		except:
-	# 			log(f'  {attr}: <无法获取>')
 
 # 成交主推函数
 def deal_callback(contextInfo, dealInfo):
@@ -555,15 +546,6 @@ def deal_callback(contextInfo, dealInfo):
 		log(f'deal_callback(): {stock} {name}, 买入成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
 	elif dealInfo.m_nDirection == 49:  # 卖出
 		log(f'deal_callback(): {stock} {name}, 卖出成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
-	# 打印所有成员变量的内容
-	# log('deal_callback(): All attributes of dealInfo:')
-	# for attr in dir(dealInfo):
-	# 	if not attr.startswith('_'):
-	# 		try:
-	# 			value = getattr(dealInfo, attr)
-	# 			log(f'  {attr}: {value}')
-	# 		except:
-	# 			log(f'  {attr}: <无法获取>')
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
@@ -578,15 +560,6 @@ def position_callback(contextInfo, positionInfo):
 	# 可以在这里添加逻辑，如检查持仓是否为0，触发卖出信号等
 	# if positionInfo.m_nVolume == 0:
 	# 	log(f'position_callback(): 持仓清空 - 股票: {stock} {name}')
-	# 打印所有成员变量的内容
-	# log('position_callback(): All attributes of positionInfo:')
-	# for attr in dir(positionInfo):
-	# 	if not attr.startswith('_'):
-	# 		try:
-	# 			value = getattr(positionInfo, attr)
-	# 			log(f'  {attr}: {value}')
-	# 		except:
-	# 			log(f'  {attr}: <无法获取>')
 	
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
@@ -594,15 +567,6 @@ def orderError_callback(contextInfo, passOrderInfo, msg):
 	name = get_stock_name(contextInfo, stock)
 	log(f'\norderError_callback(): 下单错误 - 股票: {stock} {name}, 错误信息: {msg}')
 	# 可以在这里添加逻辑，如重试下单或发送警报
-	# 打印所有成员变量的内容
-	# log(f'orderError_callback(): {stock} {name}:')
-	# for attr in dir(passOrderInfo):
-	# 	if not attr.startswith('_'):
-	# 		try:
-	# 			value = getattr(passOrderInfo, attr)
-	# 			log(f'  {attr}: {value}')
-	# 		except:
-	# 			log(f'  {attr}: <无法获取>')
 
 def get_stock_name(contextInfo, stock):
 	try:
@@ -616,7 +580,7 @@ def log(*args):
 	with open(r'C:\a\trade\量化\中信证券\code\QMT.txt', 'a', encoding='utf-8') as f:
 		f.write(message + '\n')
 
-def data_init_db_stock():
+def data_init_db():
 	"""初始化股票SQLite数据库"""
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
 	cursor = conn.cursor()
@@ -655,6 +619,7 @@ def data_init_db_stock():
 def data_save_stock_data(df):
 	"""保存股票数据到数据库，按照data_init_db_stock()的表结构"""
 	if df is None or df.empty:
+		print(f'data_save_stock_data(): Error! df is None or df.empty')
 		return
 	try:
 		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
@@ -805,7 +770,7 @@ def data_download_stock(contextInfo):
 	# base_delay = 1
 
 	# 初始化数据库
-	data_init_db_stock()
+	data_init_db()
 
 	# 获取股票列表
 	all_codes = data_get_stock_list(contextInfo)
