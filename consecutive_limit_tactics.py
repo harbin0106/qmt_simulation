@@ -55,6 +55,25 @@ def init(contextInfo):
 		r_date = str(row['指定日期T'])
 		db_save_stock_status(code, name, r_date, None, None, None, None)
 
+	# 获取上一个交易日
+	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 3, '1d')
+	if len(trading_dates) != 3:
+		log(f'init(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+		return
+	yesterday_date = trading_dates[0]
+	log(f'yesterday_date={yesterday_date}')
+	# 从数据库加载上一个交易日的数据
+	df_all = db_load_all()
+	T.codes_to_sell = df_all[df_all['r_date'] == yesterday_date].copy()
+	T.codes_to_sell = T.codes_to_sell.rename(columns={'code': '股票代码', 'name': '股票名称', 'r_date': '指定日期T'})
+	# 按照日期从小到大排序
+	T.codes_to_sell = T.codes_to_sell.sort_values(by='指定日期T', ascending=True)
+	log(f'T.codes_to_sell: \n{T.codes_to_sell}')
+
+	# 从T.codes_to_sell获取股票代码
+	T.codes_to_buy_on_market_open = list(T.codes_to_sell['股票代码'].unique())
+	# log(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
+
 	T.codes_all.extend(T.codes_to_buy_on_market_open)
 	T.codes_all = list(set(T.codes_all))
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
@@ -615,6 +634,31 @@ def db_save_stock_status(code, name, r_date, b_date, b_price, s_date, s_price):
 	''', (code, name, r_date, b_date, b_price, s_date, s_price))
 	conn.commit()
 	conn.close()
+
+def db_load_all():
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	df = pd.read_sql_query("SELECT * FROM stock_status", conn)
+	conn.close()
+	return df
+
+def db_load_stock_status(r_date):
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('SELECT code, name, r_date, b_date, b_price, s_date, s_price FROM stock_status WHERE r_date = ?', (r_date,))
+	rows = cursor.fetchall()
+	conn.close()
+	stock_status_list = []
+	for row in rows:
+		stock_status_list.append({
+			'code': row[0],
+			'name': row[1],
+			'r_date': row[2],
+			'b_date': row[3],
+			'b_price': row[4],
+			's_date': row[5],
+			's_price': row[6]
+		})
+	return stock_status_list
 
 def db_load_stock_status(code):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
