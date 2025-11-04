@@ -138,15 +138,15 @@ def on_timer(contextInfo):
 		# 	continue
 		recommendation_date = T.codes_recommendated[code]['r_date']
 		to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
-		log(f'on_timer(): code={code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
+		log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
 		if to_buy and code not in T.codes_to_buy:
 			T.codes_to_buy.append(code)
 	# 下单买入
 	if current_time >= BUY_STOCK_TIME and len(T.codes_to_buy) > 0:
-		amount_of_each_stock = T.cash / len(T.codes_to_buy)
+		amount_of_each_stock = T.cash / len(T.codes_to_buy) / 1000
 		for code in T.codes_to_buy:
+			log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
 			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock)  # 买入1万元
-			log(f'on_timer(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
 			# 更新qmt数据库? 在回调里做? 待定
 		# Clear the buy list
 		T.codes_to_buy = []
@@ -230,8 +230,8 @@ def handlebar(contextInfo):
 		return
 	trade_is_to_sell(contextInfo)
 	return
-	trade_get_support_line_value(contextInfo)
-	return;
+	trade_get_support_price(contextInfo)
+	return
 
 	# # 开盘交易逻辑
 	# trade_on_market_open(contextInfo)
@@ -251,26 +251,25 @@ def trade_is_to_sell(contextInfo):
 		market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 		current = market_data_last_price[code]['lastPrice'].iloc[0]
 		recommendation_date = str(T.codes_to_sell[T.codes_to_sell['股票代码'] == code]['指定日期T'].iloc[0])
-		current_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), "%Y%m%d%H%M%S")[:8]
 		up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
-		support_line_value = trade_get_support_line_value(contextInfo, code, recommendation_date, current_date)
+		support_price = trade_get_support_price(contextInfo, code, recommendation_date)
 		# 获取当前时间
 		current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-		log(f'trade_is_to_sell(): code={code} {get_stock_name(contextInfo, code)}, pre_close={pre_close}, open={open}, current={current}, recommendation_date={recommendation_date}, current_date={current_date}, up_stop_price={up_stop_price}, support_line_value={support_line_value:.2f}, current_time={current_time}')	
+		log(f'trade_is_to_sell(): code={code} {get_stock_name(contextInfo, code)}, pre_close={pre_close}, open={open}, current={current}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price}, support_price={support_price:.2f}, current_time={current_time}')
 		# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
-		if open <= support_line_value and open <= pre_close * 1.04:
+		if open <= support_price and open <= pre_close * 1.04:
 			log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出')
 			T.codes_to_sell_at_close.append(code)
 		# 低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出
-		if open <= support_line_value and open > pre_close * 1.04:
+		if open <= support_price and open > pre_close * 1.04:
 			log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出')
 			T.codes_to_sell_at_open.append(code)
 		# 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
-		if open > support_line_value and current <= support_line_value:
+		if open > support_price and current <= support_price:
 			log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出')
 			T.codes_to_sell_immediate.append(code)
 		# 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
-		if open > support_line_value and current > support_line_value and current < up_stop_price and current_time >= '14:56:45' and current_time < '14:57:00':
+		if open > support_price and current > support_price and current < up_stop_price and current_time >= '14:56:45' and current_time < '14:57:00':
 			log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出')
 			T.codes_to_sell_at_close.append(code)		
 	
@@ -286,21 +285,12 @@ def trade_is_to_sell(contextInfo):
 
 def trade_is_to_buy(contextInfo, code, open, recommendation_date):
 	# 使用 recommendation_date 获取收盘价
-	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=recommendation_date, count=1, dividend_type='front', fill_data=False)
-	if market_data[code].empty:
+	market_data_recommendation_date = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=recommendation_date, count=1, dividend_type='front', fill_data=False)
+	if market_data_recommendation_date[code].empty:
 		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的昨日收盘价数据!')
 		return False
-	pre_close = market_data[code]['close'].iloc[0]
-	# 获取索引
-	# buy_date_idx = contextInfo.get_date_location(recommendation_date)
-	# 计算今天日期
-	# from datetime import datetime, timedelta
-	# today_date = (datetime.strptime(recommendation_date, '%Y%m%d') + timedelta(days=1)).strftime('%Y%m%d')
-	# current_idx = contextInfo.get_date_location(today_date)
-
-	# 计算支撑线
-	y = T.SLOPE * 1 + np.log(pre_close * 0.9)
-	support_price = np.exp(y)
+	pre_close = market_data_recommendation_date[code]['close'].iloc[0]
+	support_price = trade_get_support_price(contextInfo, code, recommendation_date)
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
 	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}')
 	return open >= support_price and open >= pre_close * T.BUY_THRESHOLD
@@ -309,17 +299,22 @@ def trade_on_buy_signal_check(contextInfo):
 	# log(f'trade_on_buy_signal_check()')	
 	pass
 
-def trade_get_support_line_value(contextInfo, code='600167.SH', recommendation_date='20250923', current_date='20250925'):
-	SLOPE = np.log(1.1095)
+def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='20250923', current_date=None):
+	if current_date is None:
+		current_date = date.today().strftime('%Y%m%d')
+	# 判断recommendation_date早于current_date
+	if recommendation_date >= current_date:
+		log(f'trade_get_support_price(): Error! recommendation_date {recommendation_date} is not earlier than current_date {current_date}!')
+		return None
 	# 获取从recommendation_date到current_date的收盘价数据
 	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False)
 	# 计算交易日天数，不包括停牌日期
 	closes = market_data[code]['close']
 	trading_days_count = closes.dropna().shape[0]
 	recommendation_close = closes.iloc[0]
-	support_line_value = np.exp((trading_days_count - 1) * SLOPE + np.log(recommendation_close * 0.9))
-	log(f'trade_get_support_line_value(): trading_days_count={trading_days_count}, closes={closes.tolist()}, recommendation_close={recommendation_close:.2f}, support_line_value={support_line_value:.2f}')
-	return support_line_value
+	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
+	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={closes.tolist()}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, current_date={current_date}')
+	return support_price
 
 def trade_on_sell_signal_check(contextInfo):
 	log(f'trade_on_sell_signal_check()')
@@ -431,29 +426,23 @@ def trade_sell_stock(contextInfo, stock):
 	log(f'trade_sell_stock(): 卖出 {volume} 股 (测试时先卖100股)')
 
 def trade_buy_stock_at_up_stop_price(contextInfo, stock, buy_amount):
-	log(f'trade_buy_stock_at_up_stop_price(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
-
+	# log(f'trade_buy_stock_at_up_stop_price(): {stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
 	# 获取涨停价
 	instrument_detail = contextInfo.get_instrument_detail(stock)
 	up_stop_price = instrument_detail.get('UpStopPrice')
 	if up_stop_price is None or up_stop_price <= 0:
 		log(f'trade_buy_stock_at_up_stop_price(): Error! 无法获取{stock}的涨停价!')
 		return
-	log(f'trade_buy_stock_at_up_stop_price(): {stock} 涨停价: {up_stop_price:.2f}')
-
 	# 查询当前账户资金余额
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
 	if len(account) == 0:
 		log(f'trade_buy_stock_at_up_stop_price(): Error! 账号未登录! 请检查!')
 		return
 	available_cash = float(account[0].m_dAvailable)
-	log(f'trade_buy_stock_at_up_stop_price(): 当前可用资金: {available_cash:.2f}')
-
 	# 检查买入金额是否超过可用资金
 	if buy_amount > available_cash:
 		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f}超过可用资金{available_cash:.2f}，跳过!')
 		return
-
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, stock, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
 	log(f'trade_buy_stock_at_up_stop_price(): {stock} {get_stock_name(contextInfo, stock)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.2f}元')
