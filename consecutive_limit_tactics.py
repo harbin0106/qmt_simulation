@@ -214,14 +214,14 @@ def trade_is_to_sell(contextInfo):
 	print(f'trade_is_to_sell(): {list(T.codes_to_sell["股票代码"].unique())}')
 	for code in T.codes_to_sell['股票代码']:
 		# 获取开盘价
-		market_data = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
-		open = market_data[code]['open'].iloc[0]
+		market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
+		open = market_data_open[code]['open'].iloc[0]
 		# 获取昨日收盘价
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
-		yesterday_close = market_data_yesterday[code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
+		market_data_yesterday_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
+		yesterday_close = market_data_yesterday_close[code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
 		# 获取当前的最新价格
-		market_data_current = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
-		current = market_data_current[code]['lastPrice'].iloc[0]
+		market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+		current = market_data_last_price[code]['lastPrice'].iloc[0]
 		recommendation_date = str(T.codes_to_sell[T.codes_to_sell['股票代码'] == code]['指定日期T'].iloc[0])
 		current_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), "%Y%m%d%H%M%S")[:8]
 		up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
