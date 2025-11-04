@@ -48,6 +48,13 @@ def init(contextInfo):
 	T.codes_to_sell = report_df
 	# log(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
 
+	# 保存股票状态到数据库
+	for _, row in report_df.iterrows():
+		code = row['股票代码']
+		name = row['股票名称']
+		r_date = str(row['指定日期T'])
+		db_save_stock_status(code, name, r_date, None, None, None, None)
+
 	T.codes_all.extend(T.codes_to_buy_on_market_open)
 	T.codes_all = list(set(T.codes_all))
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
@@ -599,6 +606,35 @@ def db_init():
 	conn.commit()
 	conn.close()
 
+def db_save_stock_status(code, name, r_date, b_date, b_price, s_date, s_price):
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('''
+	INSERT OR REPLACE INTO stock_status (code, name, r_date, b_date, b_price, s_date, s_price)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	''', (code, name, r_date, b_date, b_price, s_date, s_price))
+	conn.commit()
+	conn.close()
+
+def db_load_stock_status(code):
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('SELECT code, name, r_date, b_date, b_price, s_date, s_price FROM stock_status WHERE code = ?', (code,))
+	row = cursor.fetchone()
+	conn.close()
+	if row:
+		return {
+			'code': row[0],
+			'name': row[1],
+			'r_date': row[2],
+			'b_date': row[3],
+			'b_price': row[4],
+			's_date': row[5],
+			's_price': row[6]
+		}
+	else:
+		return None
+	
 def data_init_db():
 	"""初始化股票SQLite数据库"""
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
