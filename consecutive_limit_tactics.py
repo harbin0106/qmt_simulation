@@ -15,7 +15,7 @@ T = T()
 def init(contextInfo):
 	log('=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
 	db_init()
-	T.codes_all = []
+	T.codes_all = {}
 	T.accountid_type = 'STOCK'
 	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
 	T.accountid = 'T10100002555'	
@@ -23,11 +23,7 @@ def init(contextInfo):
 	init_load_recommendationsFromExcel(contextInfo)
 	init_load_recommendationsFromDB(contextInfo)
 
-	# T.codes_all.extend(T.codes_recommendated)
-	# T.codes_all.concat(T.codes_in_position)
-	# T.codes_all = list(set(T.codes_all))
-	# T.codes_all.extend(list(T.codes_in_position))
-	# T.codes_all = list(set(T.codes_all))
+	T.codes_all = list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys()))
 	log(f'init(): T.codes_all=\n{T.codes_all}')
 	return
 	# 操作类型：23-股票买入，24-股票卖出
@@ -72,9 +68,9 @@ def init_load_codes_in_position(contextInfo):
 	T.codes_in_position = {}
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	for dt in positions:
-		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-		if full_code not in T.codes_in_position:
-			T.codes_in_position[full_code] = get_stock_name(contextInfo, full_code)
+		code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		if code not in T.codes_in_position:
+			T.codes_in_position[code] = get_stock_name(contextInfo, full_code)
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
 def init_load_recommendationsFromExcel(contextInfo):
@@ -100,7 +96,6 @@ def init_load_recommendationsFromDB(contextInfo):
 		log(f'init(): Error! 未获取到交易日期数据 for stock 000001.SH!')
 		return
 	yesterday_date = trading_dates[0]
-	log(f'init_load_recommendationsFromDB(): yesterday_date={yesterday_date}')
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
 	df_filtered = df_all[df_all['r_date'] == yesterday_date]
@@ -109,7 +104,7 @@ def init_load_recommendationsFromDB(contextInfo):
 		T.codes_recommendated[df.code]['name'] = df.name
 		T.codes_recommendated[df.code]['r_date'] = df.r_date
 	T.codes_to_sell = T.codes_recommendated.copy()
-	log(f'init_load_recommendationsFromDB(): T.codes_recommendated=\n{T.codes_recommendated}')
+	log(f'init_load_recommendationsFromDB(): yesterday_date={yesterday_date}, T.codes_recommendated=\n{T.codes_recommendated}')
 
 def on_timer(contextInfo):
 	if not hasattr(on_timer, 'stop_timer'):
