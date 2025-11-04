@@ -269,9 +269,9 @@ def trade_is_to_buy(contextInfo, code, open, yesterday_date):
 	# current_idx = contextInfo.get_date_location(today_date)
 
 	# 计算支撑线
-	slope = np.log(1.1095)
+	SLOPE = np.log(1.1095)
 	BUY_THRESHOLD = 0.096
-	y = slope * 1 + np.log(pre_close * 0.9)
+	y = SLOPE * 1 + np.log(pre_close * 0.9)
 	support_price = np.exp(y)
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
 	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * (1 + BUY_THRESHOLD)={pre_close * (1 + BUY_THRESHOLD):.2f}')
@@ -282,14 +282,14 @@ def trade_on_buy_signal_check(contextInfo):
 	pass
 
 def trade_get_support_line_value(contextInfo, code='600167.SH', recommendation_date='20250923', current_date='20250925'):
-	slope = np.log(1.1095)
+	SLOPE = np.log(1.1095)
 	# 获取从recommendation_date到current_date的收盘价数据
 	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False)
 	# 计算交易日天数，不包括停牌日期
 	closes = market_data[code]['close']
 	trading_days_count = closes.dropna().shape[0]
 	recommendation_close = closes.iloc[0]
-	support_line_value = np.exp((trading_days_count - 1) * slope + np.log(recommendation_close * 0.9))
+	support_line_value = np.exp((trading_days_count - 1) * SLOPE + np.log(recommendation_close * 0.9))
 	log(f'trade_get_support_line_value(): trading_days_count={trading_days_count}, closes={closes.tolist()}, recommendation_close={recommendation_close:.2f}, support_line_value={support_line_value:.2f}')
 	return support_line_value
 
@@ -347,7 +347,7 @@ def trade_query_info(contextInfo):
 				f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
 		except (AttributeError, ValueError):
 			# 如果没有时间字段或格式不匹配，打印所有
-			log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
+			log(f'trade_query_info(): Error! {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
 			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
 
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
@@ -363,7 +363,7 @@ def trade_query_info(contextInfo):
 				f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
 		except (AttributeError, ValueError):
 			# 如果没有时间字段或格式不匹配，打印所有
-			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
+			log(f'trade_query_info(): Error! {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
 			f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
 
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
@@ -609,7 +609,7 @@ def get_stock_name(contextInfo, stock):
 		instrument = contextInfo.get_instrument_detail(stock)
 		return instrument.get('InstrumentName')
 	except:
-		return "未知"
+		return "get_stock_name(): Error! 未知"
 
 def log(*args):
 	message = ' '.join(str(arg) for arg in args)
@@ -691,7 +691,7 @@ def data_save_stock_data(df):
 		conn.close()
 		# print(f"成功保存 {ts_code} 数据，共 {len(df)} 条记录")
 	except Exception as e:
-		print(f"保存股票数据时出错: {e}")
+		print(f"data_save_stock_data(): Error! 保存股票数据时出错: {e}")
 
 def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
 	"""
@@ -755,7 +755,7 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
 				df['circ_mv'] = None
 				print(f'Error! 未获取到 {ts_code} 的财务数据')
 		except Exception as e:
-			print(f'Error! 获取 {ts_code} 的财务数据失败: {e}')
+			print(f'data_download_single_stock_data(): Error! 获取 {ts_code} 的财务数据失败: {e}')
 			df['pe'] = None
 			df['circ_mv'] = None
 
@@ -764,7 +764,7 @@ def data_download_single_stock_data(contextInfo, ts_code, start_date, end_date):
 
 		return df
 	except Exception as e:
-		print(f"获取 {ts_code} 数据时出错: {e}")
+		print(f"data_download_single_stock_data(): Error! 获取 {ts_code} 数据时出错: {e}")
 		return None
 
 def data_get_stock_list(contextInfo):
@@ -778,7 +778,7 @@ def data_get_stock_list(contextInfo):
 		all_stocks = contextInfo.get_stock_list_in_sector('沪深A股')
 	except:
 		# 如果都不支持，使用指数成份股作为近似
-		print("Error! QMT API 不支持直接获取完整A股列表!")
+		print("data_get_stock_list(): Error! QMT API 不支持直接获取完整A股列表!")
 		return []
 
 	# 筛选掉ST股票（通过名称过滤）
@@ -789,7 +789,7 @@ def data_get_stock_list(contextInfo):
 			if name and 'ST' not in name:
 				filtered_codes.append(stock)
 		except:
-			print("Error! get_stock_name() exception!")
+			print("data_get_stock_list(): Error! get_stock_name() exception!")
 			return []
 
 	print(f"从QMT API获取并过滤后共发现 {len(filtered_codes)} 只股票. 过滤前总数: {len(all_stocks)}")
@@ -831,7 +831,7 @@ def data_download_stock(contextInfo):
 				else:
 					print(f"{ts_code} 数据为空，重试中...")
 			except Exception as e:
-				print(f"获取 {ts_code} 数据失败 (尝试 {attempt + 1}/3): {e}")
+				print(f"data_download_stock(): Error! 获取 {ts_code} 数据失败 (尝试 {attempt + 1}/3): {e}")
 				# delay = base_delay + random.uniform(0, 2)
 				# time.sleep(delay)
 				continue
@@ -898,7 +898,7 @@ def data_load_stock(code, start_date='20200101'):
 		df = df.reset_index(drop=True)
 		return df
 	except Exception as e:
-		print(f"从数据库加载股票 {code} 数据失败: {e}")
+		print(f"data_load_stock(): Error! 从数据库加载股票 {code} 数据失败: {e}")
 		return pd.DataFrame(columns=columns)
 	finally:
 		if 'conn' in locals():
