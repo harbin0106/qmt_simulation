@@ -17,8 +17,8 @@ def init(contextInfo):
 	init_trade_parameters(contextInfo)
 	db_init()
 	init_load_codes_in_position(contextInfo)
-	init_load_recommendationsFromExcel(contextInfo)
-	init_load_recommendationsFromDB(contextInfo)
+	init_load_recommendations_from_excel(contextInfo)
+	init_load_recommendations_from_db(contextInfo)
 
 	T.codes_all = list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys()))
 	log(f'init(): T.codes_all=\n{T.codes_all}')
@@ -47,14 +47,14 @@ def init_load_codes_in_position(contextInfo):
 			T.codes_in_position[code] = get_stock_name(contextInfo, full_code)
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
-def init_load_recommendationsFromExcel(contextInfo):
+def init_load_recommendations_from_excel(contextInfo):
 	# 从Excel文件中读取report_df
 	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-03T13-34-16.xlsx', sheet_name='Report')
 	# 按照日期从小到大排序
 	report_df = report_df.sort_values(by='指定日期T', ascending=True)
 	# 去掉不需要的列
 	report_df = report_df.drop(columns=['T+1增加率', 'T+2增加率', 'T+3增加率', 'T+4增加率', 'T+5增加率'])
-	log(f'init_load_recommendationsFromExcel(): report_df=\n{report_df}')
+	log(f'init_load_recommendations_from_excel(): report_df=\n{report_df}')
 	# 保存股票状态到数据库
 	for _, row in report_df.iterrows():
 		code = row['股票代码']
@@ -62,25 +62,25 @@ def init_load_recommendationsFromExcel(contextInfo):
 		r_date = str(row['指定日期T'])
 		db_save_stock_status(code, name, r_date, None, None, None, None)
 
-def init_load_recommendationsFromDB(contextInfo):
+def init_load_recommendations_from_db(contextInfo):
 	T.codes_recommendated = {}
 	# 获取上一个交易日
-	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 3, '1d')
-	if len(trading_dates) != 3:
+	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
+	if len(trading_dates) != 2:
 		log(f'init(): Error! 未获取到交易日期数据 for stock 000001.SH!')
 		return
-	yesterday_date = trading_dates[0]
+	recommendation_date = trading_dates[0]
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
-	df_filtered = df_all[df_all['r_date'] == yesterday_date]
-	if len(df_filtered) == 0:
-		print(f'init_load_recommendationsFromDB(): Error! Number of recommendation is 0!')
+	df_filtered = df_all[df_all['r_date'] == recommendation_date]
 	for df in df_filtered.itertuples():
 		T.codes_recommendated[df.code] = {}
 		T.codes_recommendated[df.code]['name'] = df.name
 		T.codes_recommendated[df.code]['r_date'] = df.r_date
 	T.codes_to_sell = T.codes_recommendated.copy()
-	log(f'init_load_recommendationsFromDB(): yesterday_date={yesterday_date}, T.codes_recommendated=\n{T.codes_recommendated}')
+	log(f'init_load_recommendations_from_db(): recommendation_date={recommendation_date}, T.codes_recommendated=\n{T.codes_recommendated}')
+	if len(df_filtered) == 0:
+		log(f'init_load_recommendations_from_db(): Error! Number of recommendation is 0!')
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -120,12 +120,12 @@ def on_timer(contextInfo):
 	STOP_TIMER_TIME = "09:25:00"
 	CHECK_PRICE_TIME = "09:24:00"
 	BUY_STOCK_TIME = "09:24:20"
-	if current_time > STOP_TIMER_TIME:
+	if current_time > STOP_TIMER_TIME and False:
 		log("on_timer(): 集合竞价结束")
 		on_timer.stop_timer = True
 		return
 	# Do not check prices before CHECK_PRICE_TIME
-	if current_time < CHECK_PRICE_TIME:
+	if current_time < CHECK_PRICE_TIME and False:
 		return
 	log(f'on_timer(): current_time={current_time}')
 	ticks = contextInfo.get_full_tick(list(set(T.codes_recommendated.keys())))
@@ -183,8 +183,8 @@ def on_timer_simulate(contextInfo):
 			# 判断该股票的价格
 			last_price = data[code]['lastPrice'].iloc[-1]
 			trading_dates = ContextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
-			yesterday_date = trading_dates[-2] if len(trading_dates) >= 2 else '20251102'
-			to_buy = trade_is_to_buy(contextInfo, code, last_price, yesterday_date)
+			recommendation_date = trading_dates[-2] if len(trading_dates) >= 2 else '20251102'
+			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
 			log(f'on_timer_simulate(): code={code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
 			if to_buy and code not in T.codes_to_buy:
 				T.codes_to_buy.append(code)
@@ -284,18 +284,18 @@ def trade_is_to_sell(contextInfo):
 	for stock in T.codes_to_sell_at_open:
 		trade_sell_stock(contextInfo, stock)
 
-def trade_is_to_buy(contextInfo, code, open, yesterday_date):
-	# 使用 yesterday_date 获取昨天收盘价
-	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=yesterday_date, end_time=yesterday_date, count=1, dividend_type='front', fill_data=False)
+def trade_is_to_buy(contextInfo, code, open, recommendation_date):
+	# 使用 recommendation_date 获取收盘价
+	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=recommendation_date, count=1, dividend_type='front', fill_data=False)
 	if market_data[code].empty:
 		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的昨日收盘价数据!')
 		return False
 	pre_close = market_data[code]['close'].iloc[0]
 	# 获取索引
-	# buy_date_idx = contextInfo.get_date_location(yesterday_date)
+	# buy_date_idx = contextInfo.get_date_location(recommendation_date)
 	# 计算今天日期
 	# from datetime import datetime, timedelta
-	# today_date = (datetime.strptime(yesterday_date, '%Y%m%d') + timedelta(days=1)).strftime('%Y%m%d')
+	# today_date = (datetime.strptime(recommendation_date, '%Y%m%d') + timedelta(days=1)).strftime('%Y%m%d')
 	# current_idx = contextInfo.get_date_location(today_date)
 
 	# 计算支撑线
