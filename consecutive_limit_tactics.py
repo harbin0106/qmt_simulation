@@ -5,7 +5,7 @@ import talib
 from datetime import datetime, date, time, timedelta
 import sqlite3
 import time
-import json
+# import json
 from xtquant import xtdata
 # Global trade variables
 class T():
@@ -33,14 +33,17 @@ def init(contextInfo):
 	# 		if i >= 3:
 	# 			break
 	# print(f'T.codes_to_sell={T.codes_to_sell}')
-	# 读取 JSON 文件获取买入股票代码
-	with open('C:/a/trade/量化/中信证券/code/tushare20251031-20251103T133416.json', 'r', encoding='utf-8') as f:
-		data = json.load(f)
-	T.codes_to_buy_on_market_open = []
-	T.codes_to_sell = []
-	for stock in data['stocks']:
-		T.codes_to_buy_on_market_open.append(stock['code'])
-		T.codes_to_sell.append(stock['code'])
+	# 从Excel文件中读取report_df
+	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-03T13-34-16.xlsx', sheet_name='Report')
+	# 按照日期从小到大排序
+	report_df = report_df.sort_values(by='指定日期T', ascending=True)
+	# 去掉不需要的列
+	report_df = report_df.drop(columns=['T+1增加率', 'T+2增加率', 'T+3增加率', 'T+4增加率', 'T+5增加率'])
+	print(f'report_df: \n{report_df}')
+
+	# 从report_df获取股票代码
+	T.codes_to_buy_on_market_open = list(report_df['股票代码'].unique())
+	T.codes_to_sell = list(report_df['股票代码'].unique())
 	# print(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
 
 	T.codes_all.extend(T.codes_to_buy_on_market_open)
