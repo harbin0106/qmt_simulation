@@ -43,13 +43,13 @@ def init(contextInfo):
 
 	# 从report_df获取股票代码
 	T.codes_to_buy_on_market_open = list(report_df['股票代码'].unique())
-	T.codes_to_sell = list(report_df['股票代码'].unique())
+	T.codes_to_sell = report_df
 	# print(f'T.codes_to_buy_on_market_open={T.codes_to_buy_on_market_open}')
 
 	T.codes_all.extend(T.codes_to_buy_on_market_open)
 	T.codes_all = list(set(T.codes_all))
 	# 获取持仓股票代码并加入T.codes_to_sell_on_market_open
-	T.codes_all.extend(T.codes_to_sell)
+	T.codes_all.extend(list(T.codes_to_sell['股票代码'].unique()))
 	T.codes_all = list(set(T.codes_all))
 	# print(f'T.codes_all={T.codes_all}')
 	# 操作类型：23-股票买入，24-股票卖出
@@ -210,8 +210,8 @@ def handlebar(contextInfo):
 	trade_on_sell_signal_check(contextInfo)
 
 def trade_is_to_sell(contextInfo):
-	print(f'trade_is_to_sell(): {T.codes_to_sell}')
-	for code in T.codes_to_sell:
+	print(f'trade_is_to_sell(): {list(T.codes_to_sell["股票代码"].unique())}')
+	for code in T.codes_to_sell['股票代码']:
 		# 获取开盘价
 		market_data = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=True, subscribe=True)
 		open = market_data[code]['open'].iloc[0]
@@ -221,13 +221,13 @@ def trade_is_to_sell(contextInfo):
 		# 获取当前的最新价格
 		market_data_current = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=True, subscribe=True)
 		current = market_data_current[code]['lastPrice'].iloc[0]
-		recommendation_date = '20251031'
+		recommendation_date = str(T.codes_to_sell[T.codes_to_sell['股票代码'] == code]['指定日期T'].iloc[0])
 		current_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), "%Y%m%d%H%M%S")[:8]
 		up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 		support_line_value = trade_get_support_line_value(contextInfo, code, recommendation_date, current_date)
 		# 获取当前时间
 		current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-		print(f'trade_is_to_sell(): code={code} {get_stock_name(contextInfo, code)}, yesterday_close={yesterday_close}, open={open}, current={current}, current_date={current_date}, up_stop_price={up_stop_price}, support_line_value={support_line_value:.2f}, current_time={current_time}')	
+		print(f'trade_is_to_sell(): code={code} {get_stock_name(contextInfo, code)}, yesterday_close={yesterday_close}, open={open}, current={current}, recommendation_date={recommendation_date}, current_date={current_date}, up_stop_price={up_stop_price}, support_line_value={support_line_value:.2f}, current_time={current_time}')	
 		# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 		if open <= support_line_value and open <= yesterday_close * 1.04:
 			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出')
@@ -294,7 +294,7 @@ def trade_get_support_line_value(contextInfo, code='600167.SH', recommendation_d
 def trade_on_sell_signal_check(contextInfo):
 	print(f'trade_on_sell_signal_check()')
 	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	for stock in T.codes_to_sell:
+	for stock in T.codes_to_sell['股票代码']:
 		# 获取当前股价
 		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='tick', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False)
 		if market_data[stock].empty:
