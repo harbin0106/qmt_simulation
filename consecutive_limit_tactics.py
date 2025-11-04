@@ -14,18 +14,16 @@ T = T()
 
 def init(contextInfo):
 	log('=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
+	init_trade_parameters(contextInfo)
 	db_init()
-	T.codes_all = {}
-	T.accountid_type = 'STOCK'
-	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
-	T.accountid = 'T10100002555'	
 	init_load_codes_in_position(contextInfo)
 	init_load_recommendationsFromExcel(contextInfo)
 	init_load_recommendationsFromDB(contextInfo)
 
 	T.codes_all = list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys()))
 	log(f'init(): T.codes_all=\n{T.codes_all}')
-	init_trade_parameters(contextInfo)
+	contextInfo.set_universe(T.codes_all)
+	contextInfo.set_account(T.accountid)	
 	return
 
 	today = date.today()
@@ -84,6 +82,9 @@ def init_load_recommendationsFromDB(contextInfo):
 	log(f'init_load_recommendationsFromDB(): yesterday_date={yesterday_date}, T.codes_recommendated=\n{T.codes_recommendated}')
 
 def init_trade_parameters(contextInfo):
+	T.accountid_type = 'STOCK'
+	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
+	T.accountid = 'T10100002555'
 	# 操作类型：23-股票买入，24-股票卖出
 	T.opType_buy = 23
 	# 操作类型：23-股票买入，24-股票卖出
@@ -107,8 +108,6 @@ def init_trade_parameters(contextInfo):
 	T.codes_to_sell_at_close = []
 	T.codes_to_sell_at_open = []
 	T.codes_to_sell_immediate = []
-	contextInfo.set_universe(T.codes_all)
-	contextInfo.set_account(T.accountid)
 
 def on_timer(contextInfo):
 	if not hasattr(on_timer, 'stop_timer'):
