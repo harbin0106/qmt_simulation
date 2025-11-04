@@ -95,15 +95,15 @@ def on_timer(contextInfo):
 	if on_timer.stop_timer:
 		return
 	current_time = datetime.now().strftime("%H:%M:%S")
-	stop_timer_time = "09:25:00"
-	check_price_time = "09:24:00"
-	buy_stock_time = "09:24:20"
-	if current_time > stop_timer_time:
+	STOP_TIMER_TIME = "09:25:00"
+	CHECK_PRICE_TIME = "09:24:00"
+	BUY_STOCK_TIME = "09:24:20"
+	if current_time > STOP_TIMER_TIME:
 		print("集合竞价结束")
 		on_timer.stop_timer = True
 		return
-	# Do not check prices before check_price_time
-	if current_time < check_price_time:
+	# Do not check prices before CHECK_PRICE_TIME
+	if current_time < CHECK_PRICE_TIME:
 		return
 	print()
 	print(f'on_timer(): current_time={current_time}')
@@ -121,10 +121,10 @@ def on_timer(contextInfo):
 		if to_buy and code not in T.codes_to_buy:
 			T.codes_to_buy.append(code)
 	# 下单买入
-	if current_time >= buy_stock_time and len(T.codes_to_buy) > 0:
+	if current_time >= BUY_STOCK_TIME and len(T.codes_to_buy) > 0:
 		amount_of_each_stock = T.capital / len(T.codes_to_buy)
 		for code in T.codes_to_buy:
-			trade_buy_stock(contextInfo, code, amount_of_each_stock)  # 买入1万元
+			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock)  # 买入1万元
 			print(f'on_timer(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
 		T.codes_to_buy = []
 	
