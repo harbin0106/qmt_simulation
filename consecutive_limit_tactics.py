@@ -73,6 +73,8 @@ def init_load_recommendationsFromDB(contextInfo):
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
 	df_filtered = df_all[df_all['r_date'] == yesterday_date]
+	if len(df_filtered) == 0:
+		print(f'init_load_recommendationsFromDB(): Error! Number of recommendation is 0!')
 	for df in df_filtered.itertuples():
 		T.codes_recommendated[df.code] = {}
 		T.codes_recommendated[df.code]['name'] = df.name
@@ -102,11 +104,13 @@ def init_trade_parameters(contextInfo):
 	T.quickTrade = 2 	
 	T.userOrderId = '投资备注'
 	T.price_invalid = -1
-	T.capital = 100000
+	T.cash = 100000
 	T.codes_to_buy = []
 	T.codes_to_sell_at_close = []
 	T.codes_to_sell_at_open = []
 	T.codes_to_sell_immediate = []
+	T.SLOPE = np.log(1.1098)
+	T.BUY_THRESHOLD = 1.096
 
 def on_timer(contextInfo):
 	if not hasattr(on_timer, 'stop_timer'):
@@ -125,25 +129,27 @@ def on_timer(contextInfo):
 	if current_time < CHECK_PRICE_TIME:
 		return
 	log(f'on_timer(): current_time={current_time}')
-	ticks = contextInfo.get_full_tick(T.codes_recommendated)
+	ticks = contextInfo.get_full_tick(list(set(T.codes_recommendated.keys())))
 	# log(f'on_timer(): ticks=\n{ticks}')
-	for code in T.codes_recommendated:
+	for code in list(set(T.codes_recommendated.keys())):
 		last_price = ticks[code]['lastPrice']
-		trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
-		if len(trading_dates) < 2:
-			log(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
-			continue
-		yesterday_date = trading_dates[-2]
-		to_buy = trade_is_to_buy(contextInfo, code, last_price, yesterday_date)
-		log(f'on_timer(): code={code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, yesterday_date={yesterday_date}, to_buy={to_buy}')
+		# trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
+		# if len(trading_dates) < 2:
+		# 	log(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+		# 	continue
+		recommendation_date = T.codes_recommendated[code]['r_date']
+		to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
+		log(f'on_timer(): code={code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
 		if to_buy and code not in T.codes_to_buy:
 			T.codes_to_buy.append(code)
 	# 下单买入
 	if current_time >= BUY_STOCK_TIME and len(T.codes_to_buy) > 0:
-		amount_of_each_stock = T.capital / len(T.codes_to_buy)
+		amount_of_each_stock = T.cash / len(T.codes_to_buy)
 		for code in T.codes_to_buy:
 			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock)  # 买入1万元
 			log(f'on_timer(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
+			# 更新qmt数据库? 在回调里做? 待定
+		# Clear the buy list
 		T.codes_to_buy = []
 	
 def on_timer_simulate(contextInfo):
@@ -186,7 +192,7 @@ def on_timer_simulate(contextInfo):
 				T.codes_to_buy.append(code)
 	# 下单买入
 	if on_timer_simulate.start_time >= place_of_buy_time and len(T.codes_to_buy) > 0:
-		amount_of_each_stock = T.capital / len(T.codes_to_buy)
+		amount_of_each_stock = T.cash / len(T.codes_to_buy)
 		for code in T.codes_to_buy:
 			trade_buy_stock(contextInfo, code, amount_of_each_stock)  # 买入1万元
 			log(f'on_timer_simulate(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
@@ -289,13 +295,11 @@ def trade_is_to_buy(contextInfo, code, open, yesterday_date):
 	# current_idx = contextInfo.get_date_location(today_date)
 
 	# 计算支撑线
-	SLOPE = np.log(1.1095)
-	BUY_THRESHOLD = 0.096
-	y = SLOPE * 1 + np.log(pre_close * 0.9)
+	y = T.SLOPE * 1 + np.log(pre_close * 0.9)
 	support_price = np.exp(y)
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
-	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * (1 + BUY_THRESHOLD)={pre_close * (1 + BUY_THRESHOLD):.2f}')
-	return open >= support_price and open >= pre_close * (1 + BUY_THRESHOLD)
+	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}')
+	return open >= support_price and open >= pre_close * T.BUY_THRESHOLD
 
 def trade_on_buy_signal_check(contextInfo):
 	# log(f'trade_on_buy_signal_check()')	
