@@ -85,7 +85,7 @@ def init_load_recommendationsFromDB(contextInfo):
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
 	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
-	T.accountid = 'T10100002555'
+	T.accountid = '10100002555'
 	# 操作类型：23-股票买入，24-股票卖出
 	T.opType_buy = 23
 	# 操作类型：23-股票买入，24-股票卖出
@@ -104,7 +104,6 @@ def init_trade_parameters(contextInfo):
 	T.quickTrade = 2 	
 	T.userOrderId = '投资备注'
 	T.price_invalid = -1
-	T.cash = 100000
 	T.codes_to_buy = []
 	T.codes_to_sell_at_close = []
 	T.codes_to_sell_at_open = []
@@ -165,7 +164,6 @@ def on_timer_simulate(contextInfo):
 		log(f'on_timer_simulate(): on_timer_simulate.start_time >= stop_timer_time, stopping timer.')
 		on_timer_simulate.stop_timer = True
 		return
-	log()
 	log(f'on_timer_simulate(): start_time={on_timer_simulate.start_time}')
 	# 用get_market_data_ex()的tick数据带上lastPrice且subsribe=True.
 	data = contextInfo.get_market_data_ex(fields=['lastPrice', 'open', 'high', 'low', 'close', 'volume', 'amount'], code=T.codes_recommendated, period='tick', start_time=on_timer_simulate.start_time.strftime('%Y%m%d%H%M%S'), end_time=(on_timer_simulate.start_time+pd.Timedelta(seconds=9)).strftime('%Y%m%d%H%M%S'), count=-1, subscribe=True)
@@ -201,7 +199,13 @@ def on_timer_simulate(contextInfo):
 	on_timer_simulate.start_time += pd.Timedelta(seconds=3)
 
 def after_init(contextInfo):
-	log(f'after_init()')
+	# 查询当前账户资金余额
+	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
+	if len(account) == 0:
+		log(f'after_init(): Error! 账号未登录! 请检查!')
+		return
+	T.cash = float(account[0].m_dAvailable)	
+	log(f'after_init(): T.cash={T.cash}')	
 	# account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
 	# if len(account) == 0:
 	# 	log(f'after_init(): Error! 账号{T.accountid} 未登录! 请检查!')
