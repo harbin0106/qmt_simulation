@@ -63,6 +63,7 @@ def init(contextInfo):
 	# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 6：买1价 7：买2价（组合不支持）8：买3价（组合不支持） 9：买4价（组合不支持）10：买5价（组合不支持）11：（指定价）模型价（只对单股情况支持,对组合交易不支持）12：涨跌停价 13：挂单价 14：对手价
 	T.prType_sell_1 = 4
 	T.prType_buy_1 = 6
+	T.prType_designated = 11
 	T.volume = 100
 	T.strategyName = 'consecutive_limit_tactics'
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
@@ -186,9 +187,11 @@ def after_init(contextInfo):
 	# trade_query_info(contextInfo)
 	# trade_sell_stock(contextInfo, T.codes_all[8])
 	# trade_buy_stock(contextInfo, T.codes_all[0], 10000)
+	trade_buy_stock_at_up_stop_price(contextInfo, '002759.SZ', 10000)
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
+	return
 	# bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# print(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
@@ -399,6 +402,34 @@ def trade_sell_stock(contextInfo, stock):
 	volume = 100  # 测试时先卖100股
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, stock, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
 	print(f'trade_sell_stock(): 卖出 {volume} 股')
+
+def trade_buy_stock_at_up_stop_price(contextInfo, stock, buy_amount):
+	print(f'trade_buy_stock_at_up_stop_price(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
+
+	# 获取涨停价
+	instrument_detail = contextInfo.get_instrument_detail(stock)
+	up_stop_price = instrument_detail.get('UpStopPrice')
+	if up_stop_price is None or up_stop_price <= 0:
+		print(f'trade_buy_stock_at_up_stop_price(): Error! 无法获取{stock}的涨停价!')
+		return
+	print(f'trade_buy_stock_at_up_stop_price(): {stock} 涨停价: {up_stop_price:.2f}')
+
+	# 查询当前账户资金余额
+	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
+	if len(account) == 0:
+		print(f'trade_buy_stock_at_up_stop_price(): Error! 账号未登录! 请检查!')
+		return
+	available_cash = float(account[0].m_dAvailable)
+	print(f'trade_buy_stock_at_up_stop_price(): 当前可用资金: {available_cash:.2f}')
+
+	# 检查买入金额是否超过可用资金
+	if buy_amount > available_cash:
+		print(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f}超过可用资金{available_cash:.2f}，跳过!')
+		return
+
+	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
+	passorder(T.opType_buy, T.orderType_amount, T.accountid, stock, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	print(f'trade_buy_stock_at_up_stop_price(): {stock} {get_stock_name(contextInfo, stock)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.2f}元')
 
 def trade_buy_stock(contextInfo, stock, buy_amount):
 	print(f'trade_buy_stock(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
