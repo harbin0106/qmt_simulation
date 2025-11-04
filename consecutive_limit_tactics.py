@@ -7,39 +7,32 @@ import sqlite3
 import time
 import json
 from xtquant import xtdata
-
+# Global trade variables
 class T():
 	pass
 T = T()
-
-def get_stock_name(contextInfo, stock):
-	try:
-		instrument = contextInfo.get_instrument_detail(stock)
-		return instrument.get('InstrumentName')
-	except:
-		return "未知"
 
 def init(contextInfo):
 	T.codes_all = ['603938.SH', '301468.SZ']
 	T.accountid_type = 'STOCK'
 	T.accountid = '100200109'	#'100200109'。account变量是模型交易界面 添加策略时选择的资金账号，不需要手动填写
 	# 获取持仓股票代码并加入T.codes_to_sell，仅加载沪深主板股票
-	T.codes_to_sell = []
-	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
-	i = 0
-	for dt in positions:
-		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-		# 仅加载沪深主板股票：上海主板（600000-603999.SH）和深圳主板（000001-000999.SZ）
-		is_main_board = (
-			(dt.m_strInstrumentID.startswith('6') and not dt.m_strInstrumentID.startswith('688') and dt.m_strExchangeID == 'SH') or
-			(dt.m_strInstrumentID.startswith('000') and dt.m_strExchangeID == 'SZ')
-		)
-		if full_code not in T.codes_to_sell and is_main_board:
-			T.codes_to_sell.append(full_code)
-			i += 1
-			if i >= 3:
-				break
-	print(f'T.codes_to_sell={T.codes_to_sell}')
+	# T.codes_to_sell = []
+	# positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	# i = 0
+	# for dt in positions:
+	# 	full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+	# 	# 仅加载沪深主板股票：上海主板（600000-603999.SH）和深圳主板（000001-000999.SZ）
+	# 	is_main_board = (
+	# 		(dt.m_strInstrumentID.startswith('6') and not dt.m_strInstrumentID.startswith('688') and dt.m_strExchangeID == 'SH') or
+	# 		(dt.m_strInstrumentID.startswith('000') and dt.m_strExchangeID == 'SZ')
+	# 	)
+	# 	if full_code not in T.codes_to_sell and is_main_board:
+	# 		T.codes_to_sell.append(full_code)
+	# 		i += 1
+	# 		if i >= 3:
+	# 			break
+	# print(f'T.codes_to_sell={T.codes_to_sell}')
 	# 读取 JSON 文件获取买入股票代码
 	with open('C:/a/trade/量化/中信证券/code/tushare20251031-20251103T133416.json', 'r', encoding='utf-8') as f:
 		data = json.load(f)
@@ -56,27 +49,29 @@ def init(contextInfo):
 	T.codes_all.extend(T.codes_to_sell)
 	T.codes_all = list(set(T.codes_all))
 	# print(f'T.codes_all={T.codes_all}')
-	T.opType_buy = 23 	# 操作类型：23-股票买入，24-股票卖出
-	T.opType_sell = 24	# 操作类型：23-股票买入，24-股票卖出
-	T.orderType_volume = 1101	# 单股、单账号、普通、股/手方式下单
-	T.orderType_amount = 1102	# 单股、单账号、普通、金额方式下单 
-	T.prType_sell_1 = 4		# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 
-						# 6：买1价 7：买2价（组合不支持） 8：买3价（组合不支持） 9：买4价（组合不支持）
-						# 10：买5价（组合不支持） 11：（指定价）模型价（只对单股情况支持,对组合交易不支持）
-						# 12：涨跌停价 13：挂单价 14：对手价
+	# 操作类型：23-股票买入，24-股票卖出
+	T.opType_buy = 23
+	# 操作类型：23-股票买入，24-股票卖出
+	T.opType_sell = 24
+	# 单股、单账号、普通、股/手方式下单
+	T.orderType_volume = 1101
+	# 单股、单账号、普通、金额方式下单
+	T.orderType_amount = 1102
+	# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 6：买1价 7：买2价（组合不支持）8：买3价（组合不支持） 9：买4价（组合不支持）10：买5价（组合不支持）11：（指定价）模型价（只对单股情况支持,对组合交易不支持）12：涨跌停价 13：挂单价 14：对手价
+	T.prType_sell_1 = 4
 	T.prType_buy_1 = 6
 	T.volume = 100
 	T.strategyName = 'consecutive_limit_tactics'
-	T.quickTrade = 2 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。
-						# 2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
+	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
+	T.quickTrade = 2 	
 	T.userOrderId = '投资备注'
 	T.price_invalid = -1
 	T.start_time_str = '20251031092000'
 	T.capital = 100000
-	T.stocks_to_buy = []
-	T.stocks_to_sell_at_close = []
-	T.stocks_to_sell_at_open = []
-	T.stocks_to_sell_immediate = []
+	T.codes_to_buy = []
+	T.codes_to_sell_at_close = []
+	T.codes_to_sell_at_open = []
+	T.codes_to_sell_immediate = []
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
 	today = date.today()
@@ -97,12 +92,10 @@ def on_timer(contextInfo):
 		on_timer.stop_timer = False
 	if on_timer.stop_timer:
 		return
-	print()
 	current_time = datetime.now().strftime("%H:%M:%S")
 	stop_timer_time1 = "09:25:00"
 	check_price_time = "09:24:45"
 	buy_stock_time = "09:24:53"
-	print(f'on_timer(): current_time={current_time}')
 	if current_time > stop_timer_time1:
 		print("集合竞价结束")
 		on_timer.stop_timer = True
@@ -110,7 +103,8 @@ def on_timer(contextInfo):
 	# Do not check prices before check_price_time
 	if current_time < check_price_time:
 		return
-
+	print()
+	print(f'on_timer(): current_time={current_time}')
 	ticks = contextInfo.get_full_tick(T.codes_to_buy_on_market_open)
 	# print(f'on_timer(): ticks=\n{ticks}')
 	for code in T.codes_to_buy_on_market_open:
@@ -122,15 +116,15 @@ def on_timer(contextInfo):
 		yesterday_date = trading_dates[-2]
 		to_buy = trade_is_to_buy(contextInfo, code, last_price, yesterday_date)
 		print(f'on_timer(): code={code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, yesterday_date={yesterday_date}, to_buy={to_buy}')
-		if to_buy and code not in T.stocks_to_buy:
-			T.stocks_to_buy.append(code)
+		if to_buy and code not in T.codes_to_buy:
+			T.codes_to_buy.append(code)
 	# 下单买入
-	if current_time >= buy_stock_time and len(T.stocks_to_buy) > 0:
-		amount_of_each_stock = T.capital / len(T.stocks_to_buy)
-		for code in T.stocks_to_buy:
+	if current_time >= buy_stock_time and len(T.codes_to_buy) > 0:
+		amount_of_each_stock = T.capital / len(T.codes_to_buy)
+		for code in T.codes_to_buy:
 			trade_buy_stock(contextInfo, code, amount_of_each_stock)  # 买入1万元
 			print(f'on_timer(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
-		T.stocks_to_buy = []
+		T.codes_to_buy = []
 	
 def on_timer_simulate(contextInfo):
 	# Use start_time to track the current time for data fetching
@@ -168,15 +162,15 @@ def on_timer_simulate(contextInfo):
 			yesterday_date = trading_dates[-2] if len(trading_dates) >= 2 else '20251102'
 			to_buy = trade_is_to_buy(contextInfo, code, last_price, yesterday_date)
 			print(f'on_timer_simulate(): code={code}, time_index[-1]={time_index[-1]}, lastPrice={last_price:.2f}, to_buy={to_buy}')
-			if to_buy and code not in T.stocks_to_buy:
-				T.stocks_to_buy.append(code)
+			if to_buy and code not in T.codes_to_buy:
+				T.codes_to_buy.append(code)
 	# 下单买入
-	if on_timer_simulate.start_time >= place_of_buy_time and len(T.stocks_to_buy) > 0:
-		amount_of_each_stock = T.capital / len(T.stocks_to_buy)
-		for code in T.stocks_to_buy:
+	if on_timer_simulate.start_time >= place_of_buy_time and len(T.codes_to_buy) > 0:
+		amount_of_each_stock = T.capital / len(T.codes_to_buy)
+		for code in T.codes_to_buy:
 			trade_buy_stock(contextInfo, code, amount_of_each_stock)  # 买入1万元
 			print(f'on_timer_simulate(): Placing buy order for {code} {get_stock_name(contextInfo, code)} at amount {amount_of_each_stock:.2f}元')
-		T.stocks_to_buy = []
+		T.codes_to_buy = []
 
 	on_timer_simulate.start_time += pd.Timedelta(seconds=3)
 
@@ -192,8 +186,7 @@ def after_init(contextInfo):
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
-	bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	print()
+	# bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# print(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
 	if contextInfo.period != 'tick':
@@ -234,27 +227,27 @@ def trade_is_to_sell(contextInfo):
 		print(f'trade_is_to_sell(): code={code} {get_stock_name(contextInfo, code)}, yesterday_close={yesterday_close}, open={open}, current={current}, current_date={current_date}, up_stop_price={up_stop_price}, support_line_value={support_line_value:.2f}, current_time={current_time}')	
 		# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 		if open <= support_line_value and open <= yesterday_close * 1.04:
-			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_at_close.append(code)
-		# 如果低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出')
+			T.codes_to_sell_at_close.append(code)
+		# 低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出
 		if open <= support_line_value and open > yesterday_close * 1.04:
-			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_at_open.append(code)
-		# 如果高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出')
+			T.codes_to_sell_at_open.append(code)
+		# 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
 		if open > support_line_value and current <= support_line_value:
-			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_immediate.append(code)
-		# 如果高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出')
+			T.codes_to_sell_immediate.append(code)
+		# 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
 		if open > support_line_value and current > support_line_value and current < up_stop_price:
-			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 满足卖出条件，卖出')
-			T.stocks_to_sell_at_close.append(code)		
+			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出')
+			T.codes_to_sell_at_close.append(code)		
 	
 	if current_time >= '14:57:00':
 		print(f'trade_is_to_sell(): 当前时间>=14:17:00，卖出以开盘价卖出的股票')
 		# 卖出以收盘价卖出的股票
-		for stock in T.stocks_to_sell_at_close:
+		for stock in T.codes_to_sell_at_close:
 			trade_sell_stock(contextInfo, stock)
-		T.stocks_to_sell_at_close = []
+		T.codes_to_sell_at_close = []
 
 def trade_is_to_buy(contextInfo, code, open_price, yesterday_date):
 	# 使用 yesterday_date 获取昨天收盘价
@@ -578,6 +571,13 @@ def orderError_callback(contextInfo, passOrderInfo, msg):
 	# 		except:
 	# 			print(f'  {attr}: <无法获取>')
 
+def get_stock_name(contextInfo, stock):
+	try:
+		instrument = contextInfo.get_instrument_detail(stock)
+		return instrument.get('InstrumentName')
+	except:
+		return "未知"
+	
 def data_init_db_stock():
 	"""初始化股票SQLite数据库"""
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
@@ -808,7 +808,7 @@ def data_download_stock(contextInfo):
 
 	print(f"\n下载完成! 总计: {total_stocks}, 成功: {successful_downloads}, 失败: {failed_downloads}")
 
-def data_load_stock(code, start_date='20150101'):
+def data_load_stock(code, start_date='20200101'):
 	"""直接从数据库加载指定股票数据"""
 	# 转换 code 到 ts_code
 	if not code.endswith(('.SH', '.SZ', '.BJ')):
