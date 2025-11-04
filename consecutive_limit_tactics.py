@@ -185,11 +185,10 @@ def after_init(contextInfo):
 	# trade_query_info(contextInfo)
 	# trade_sell_stock(contextInfo, T.codes_all[8])
 	# trade_buy_stock(contextInfo, T.codes_all[0], 10000)
-	trade_buy_stock_at_up_stop_price(contextInfo, '002759.SZ', 10000)
+	# trade_buy_stock_at_up_stop_price(contextInfo, '002759.SZ', 10000)
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
-	return
 	# bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# print(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
@@ -242,7 +241,7 @@ def trade_is_to_sell(contextInfo):
 			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出')
 			T.codes_to_sell_immediate.append(code)
 		# 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
-		if open > support_line_value and current > support_line_value and current < up_stop_price:
+		if open > support_line_value and current > support_line_value and current < up_stop_price and current_time >= '14:56:45' and current_time < '14:57:00':
 			print(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出')
 			T.codes_to_sell_at_close.append(code)		
 	
@@ -252,6 +251,9 @@ def trade_is_to_sell(contextInfo):
 		for stock in T.codes_to_sell_at_close:
 			trade_sell_stock(contextInfo, stock)
 		T.codes_to_sell_at_close = []
+	# 卖出以开盘价卖出的股票. 稍后加入迟滞算法
+	for stock in T.codes_to_sell_at_open:
+		trade_sell_stock(contextInfo, stock)
 
 def trade_is_to_buy(contextInfo, code, open_price, yesterday_date):
 	# 使用 yesterday_date 获取昨天收盘价
