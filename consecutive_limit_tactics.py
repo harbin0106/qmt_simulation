@@ -13,7 +13,7 @@ class T():
 T = T()
 
 def init(contextInfo):
-	log('=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
+	log('\n' + '=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
 	init_trade_parameters(contextInfo)
 	db_init()
 	init_load_codes_in_position(contextInfo)
@@ -222,6 +222,9 @@ def trade_is_to_sell(contextInfo):
 			recommendation_date = T.codes_to_sell[code]['r_date']
 			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 			support_price = trade_get_support_price(contextInfo, code, recommendation_date)
+			# if code == '002255.SZ':
+			# 	open = support_price - 0.01
+			# 	pre_close = open / 1.05
 			log(f'{current_time} trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 			# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 			if open <= support_price and open <= pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
@@ -297,7 +300,7 @@ def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='
 	trading_days_count = closes.dropna().shape[0]
 	recommendation_close = closes.iloc[0]
 	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
-	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommendation_date={recommendation_date}, current_date={current_date}')
+	# log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommendation_date={recommendation_date}, current_date={current_date}')
 	return support_price
 
 def trade_on_sell_signal_check(contextInfo):
