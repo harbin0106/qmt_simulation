@@ -179,20 +179,17 @@ def after_init(contextInfo):
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
-	return
 	# bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# log(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
 	if contextInfo.period != 'tick':
-		# log(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
+		log(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
 		return
 	# Skip history bars ####################################
 	if not contextInfo.is_last_bar():
 		# log(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
 	trade_is_to_sell(contextInfo)
-	return
-	trade_get_support_price(contextInfo)
 	return
 
 	# # 开盘交易逻辑
@@ -201,8 +198,8 @@ def handlebar(contextInfo):
 	trade_on_sell_signal_check(contextInfo)
 
 def trade_is_to_sell(contextInfo):
-	log(f'trade_is_to_sell(): {list(T.codes_to_sell["股票代码"].unique())}')
-	for code in T.codes_to_sell['股票代码']:
+	log(f'trade_is_to_sell(): {list(set(T.codes_to_sell.keys()))}')
+	for code in list(set(T.codes_to_sell.keys())):
 		# 获取开盘价
 		market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
 		open = market_data_open[code]['open'].iloc[0]
@@ -212,12 +209,12 @@ def trade_is_to_sell(contextInfo):
 		# 获取当前的最新价格
 		market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 		current = market_data_last_price[code]['lastPrice'].iloc[0]
-		recommendation_date = str(T.codes_to_sell[T.codes_to_sell['股票代码'] == code]['指定日期T'].iloc[0])
+		recommendation_date = T.codes_to_sell[code]['r_date']
 		up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 		support_price = trade_get_support_price(contextInfo, code, recommendation_date)
 		# 获取当前时间
 		current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-		log(f'trade_is_to_sell(): code={code} {get_stock_name(contextInfo, code)}, pre_close={pre_close}, open={open}, current={current}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price}, support_price={support_price:.2f}, current_time={current_time}')
+		log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}, current_time={current_time}')
 		# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 		if open <= support_price and open <= pre_close * 1.04:
 			log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出')
@@ -275,7 +272,7 @@ def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='
 	trading_days_count = closes.dropna().shape[0]
 	recommendation_close = closes.iloc[0]
 	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
-	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={closes.tolist()}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommendation_date={recommendation_date}, current_date={current_date}')
+	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommendation_date={recommendation_date}, current_date={current_date}')
 	return support_price
 
 def trade_on_sell_signal_check(contextInfo):
