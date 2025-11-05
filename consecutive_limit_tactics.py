@@ -125,30 +125,32 @@ def on_timer(contextInfo):
 	current_time = datetime.now().strftime("%H:%M:%S")
 	STOP_TIMER_TIME = "09:25:00"
 	CHECK_PRICE_TIME = "09:24:00"
-	BUY_STOCK_TIME = "09:24:20"
-	if current_time > STOP_TIMER_TIME and False:
+	BUY_STOCK_TIME = "09:24:30"
+	if current_time > STOP_TIMER_TIME:
 		log("on_timer(): 集合竞价结束")
 		on_timer.stop_timer = True
 		return
-	# Do not check prices before CHECK_PRICE_TIME
-	if current_time < CHECK_PRICE_TIME and False:
+	# Check prices only
+	if current_time >= CHECK_PRICE_TIME and current_time < BUY_STOCK_TIME:
+		log(f'\non_timer(): current_time={current_time}, check price......')
+		ticks = contextInfo.get_full_tick(list(set(T.codes_recommendated.keys())))
+		# log(f'on_timer(): ticks=\n{ticks}')
+		for code in list(set(T.codes_recommendated.keys())):
+			last_price = ticks[code]['lastPrice']
+			# trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
+			# if len(trading_dates) < 2:
+			# 	log(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+			# 	continue
+			recommendation_date = T.codes_recommendated[code]['r_date']
+			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
+			log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
+			if to_buy and code not in T.codes_to_buy:
+				T.codes_to_buy.append(code)
+		log(f'on_timer(): T.codes_to_buy={T.codes_to_buy}')
 		return
-	log(f'on_timer(): current_time={current_time}')
-	ticks = contextInfo.get_full_tick(list(set(T.codes_recommendated.keys())))
-	# log(f'on_timer(): ticks=\n{ticks}')
-	for code in list(set(T.codes_recommendated.keys())):
-		last_price = ticks[code]['lastPrice']
-		# trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
-		# if len(trading_dates) < 2:
-		# 	log(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
-		# 	continue
-		recommendation_date = T.codes_recommendated[code]['r_date']
-		to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
-		log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
-		if to_buy and code not in T.codes_to_buy:
-			T.codes_to_buy.append(code)
 	# 下单买入
-	if current_time >= BUY_STOCK_TIME and len(T.codes_to_buy) > 0:
+	if current_time > BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME and len(T.codes_to_buy) > 0:
+		log(f'\non_timer(): current_time={current_time}, buy stock......')
 		amount_of_each_stock = T.cash / len(T.codes_to_buy) / 1000
 		for code in T.codes_to_buy:
 			log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
@@ -156,6 +158,7 @@ def on_timer(contextInfo):
 			# 更新qmt数据库? 在回调里做? 待定
 		# Clear the buy list
 		T.codes_to_buy = []
+		return
 	
 def after_init(contextInfo):
 	# 查询当前账户资金余额
