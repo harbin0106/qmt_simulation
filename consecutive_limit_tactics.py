@@ -49,7 +49,7 @@ def init_load_codes_in_position(contextInfo):
 
 def init_load_recommendations_from_excel(contextInfo):
 	# 从Excel文件中读取report_df
-	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-03T13-34-16.xlsx', sheet_name='Report')
+	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-05T08-49-21.xlsx', sheet_name='Report')
 	# 按照日期从小到大排序
 	report_df = report_df.sort_values(by='指定日期T', ascending=True)
 	# 去掉不需要的列
@@ -67,9 +67,15 @@ def init_load_recommendations_from_db(contextInfo):
 	# 获取上一个交易日
 	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
 	if len(trading_dates) != 2:
-		log(f'init(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+		log(f'init_load_recommendations_from_db(): Error! 未获取到交易日期数据 for stock 000001.SH!')
 		return
-	recommendation_date = trading_dates[0]
+	log(f'init_load_recommendations_from_db(): trading_dates={trading_dates}')
+	# 规避trading_dates不能真实反映当前日期的问题
+	current_date = date.today().strftime('%Y%m%d')
+	if trading_dates[1] == current_date:
+		recommendation_date = trading_dates[0]
+	else:
+		recommendation_date = trading_dates[1]
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
 	df_filtered = df_all[df_all['r_date'] == recommendation_date]
@@ -158,7 +164,7 @@ def after_init(contextInfo):
 		log(f'after_init(): Error! 账号未登录! 请检查!')
 		return
 	T.cash = float(account[0].m_dAvailable)	
-	log(f'after_init(): T.cash={T.cash}')	
+	log(f'after_init(): T.cash={T.cash:.0f} 元')	
 	# account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
 	# if len(account) == 0:
 	# 	log(f'after_init(): Error! 账号{T.accountid} 未登录! 请检查!')
@@ -266,7 +272,7 @@ def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='
 	trading_days_count = closes.dropna().shape[0]
 	recommendation_close = closes.iloc[0]
 	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
-	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={closes.tolist()}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, current_date={current_date}')
+	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={closes.tolist()}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommendation_date={recommendation_date}, current_date={current_date}')
 	return support_price
 
 def trade_on_sell_signal_check(contextInfo):
@@ -394,11 +400,11 @@ def trade_buy_stock_at_up_stop_price(contextInfo, stock, buy_amount):
 	available_cash = float(account[0].m_dAvailable)
 	# 检查买入金额是否超过可用资金
 	if buy_amount > available_cash:
-		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f}超过可用资金{available_cash:.2f}，跳过!')
+		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, stock, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price(): {stock} {get_stock_name(contextInfo, stock)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.2f}元')
+	log(f'trade_buy_stock_at_up_stop_price(): {stock} {get_stock_name(contextInfo, stock)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.0f}元')
 
 def trade_buy_stock(contextInfo, stock, buy_amount):
 	log(f'trade_buy_stock(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
