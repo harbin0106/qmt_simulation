@@ -83,6 +83,7 @@ def init_load_recommendations_from_db(contextInfo):
 		T.codes_recommendated[df.code] = {}
 		T.codes_recommendated[df.code]['name'] = df.name
 		T.codes_recommendated[df.code]['r_date'] = df.r_date
+		T.codes_recommendated[df.code]['sell_status'] = ''
 	T.codes_to_sell = T.codes_recommendated.copy()
 	log(f'init_load_recommendations_from_db(): recommendation_date={recommendation_date}, T.codes_recommendated=\n{T.codes_recommendated}')
 	if len(df_filtered) == 0:
@@ -219,43 +220,42 @@ def trade_is_to_sell(contextInfo):
 			support_price = trade_get_support_price(contextInfo, code, recommendation_date)
 			log(f'{current_time} trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 			# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
-			if open <= support_price and open <= pre_close * 1.04 and code not in T.codes_to_sell_at_close:
+			if open <= support_price and open <= pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
 				log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} SELL_AT_CLOSE 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出')
-				T.codes_to_sell_at_close.append(code)
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
 			# 低于支撑线开盘, 且开盘价高于4%, 则以开盘价卖出
-			if open <= support_price and open > pre_close * 1.04 and code not in T.codes_to_sell_at_open:
+			if open <= support_price and open > pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
 				log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} SELL_AT_OPEN 低于支撑线开盘, 但开盘价高于4%, 则以开盘价卖出')
-				T.codes_to_sell_at_open.append(code)
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN'
 			# 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
-			if open > support_price and current <= support_price and code not in T.codes_to_sell_immediate:
+			if open > support_price and current <= support_price and T.codes_to_sell[code]['sell_status'] == '':
 				log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} SELL_IMMEDIATE 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出')
-				T.codes_to_sell_immediate.append(code)
 				T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE'
 			# 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
-			if open > support_price and current > support_price and current < up_stop_price and current_time >= CHECK_CLOSE_PRICE_TIME and current_time < SELL_AT_CLOSE_TIME and code not in T.codes_to_sell_at_close:
+			if open > support_price and current > support_price and current < up_stop_price and current_time >= CHECK_CLOSE_PRICE_TIME and current_time < SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == '':
 				log(f'trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)} SELL_AT_CLOSE 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出')
-				T.codes_to_sell_at_close.append(code)	
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
 	
 	# log(f'trade_is_to_sell()1: {T.codes_to_sell}')
-	if current_time >= SELL_AT_CLOSE_TIME and len(T.codes_to_sell_at_close) > 0:
-		log(f'trade_is_to_sell(): 当前时间>={SELL_AT_CLOSE_TIME}，卖出以收盘价卖出的股票')
-		# 卖出以收盘价卖出的股票
-		for stock in T.codes_to_sell_at_close:
-			trade_sell_stock(contextInfo, stock)
-		T.codes_to_sell_at_close = []
-	# 卖出以开盘价卖出的股票. 稍后加入迟滞算法. 如何避免反复进入? 要全局存储标志位, 要写入数据库, 并且在初始化时要加载进来. TODO
-	if len(T.codes_to_sell_at_open) > 0:
-		for stock in T.codes_to_sell_at_open:
-			trade_sell_stock(contextInfo, stock)
-		T.codes_to_sell_at_open = []
-	# 卖出立即卖出的股票
-	if len(T.codes_to_sell_immediate) > 0:
-		for stock in T.codes_to_sell_immediate:
-			trade_sell_stock(contextInfo, stock)
-		T.codes_to_sell_immediate = []
+	for code in list(set(T.codes_to_sell.keys())):
+		if  T.codes_to_sell[code]['sell_status'] == '':
+			continue
+		if current_time >= SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE':
+			log(f'trade_is_to_sell(): 当前时间>={SELL_AT_CLOSE_TIME}，卖出以收盘价卖出的股票')
+			# 卖出以收盘价卖出的股票
+			trade_sell_stock(contextInfo, code)
+			T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE_DONE'
+			continue
+		# 卖出以开盘价卖出的股票. 稍后加入迟滞算法. 如何避免反复进入? 要全局存储标志位, 要写入数据库, 并且在初始化时要加载进来. TODO
+		if T.codes_to_sell[code]['sell_status'] == 'SELL_AT_OPEN':
+			trade_sell_stock(contextInfo, code)
+			T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN_DONE'
+			continue
+		# 卖出立即卖出的股票
+		if T.codes_to_sell[code]['sell_status'] == 'SELL_IMMEDIATE':
+			trade_sell_stock(contextInfo, code)
+			T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE_DONE'
+			continue
 
 def trade_is_to_buy(contextInfo, code, open, recommendation_date):
 	# 使用 recommendation_date 获取收盘价
@@ -293,40 +293,40 @@ def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='
 def trade_on_sell_signal_check(contextInfo):
 	log(f'trade_on_sell_signal_check()')
 	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	for stock in T.codes_to_sell['股票代码']:
+	for code in T.codes_to_sell['股票代码']:
 		# 获取当前股价
-		market_data = contextInfo.get_market_data_ex(['close'], [stock], period='tick', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data[stock].empty:
-			log(f'trade_on_sell_signal_check(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的当前股价数据，跳过!')
+		market_data = contextInfo.get_market_data_ex(['close'], [code], period='tick', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False, subscribe=True)
+		if market_data[code].empty:
+			log(f'trade_on_sell_signal_check(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的当前股价数据，跳过!')
 			continue
-		current_price = market_data[stock]['close'].iloc[0]
-		# log(f'trade_on_sell_signal_check(): {stock} 当前股价：{current_price:.2f}')
+		current_price = market_data[code]['close'].iloc[0]
+		# log(f'trade_on_sell_signal_check(): {code} 当前股价：{current_price:.2f}')
 
 		# 获取昨日收盘价
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data_yesterday[stock].empty:
-			log(f'trade_on_sell_signal_check(): Error! 未获取到{stock} {get_stock_name(contextInfo, stock)} 的昨日收盘价数据，跳过!')
+		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
+		if market_data_yesterday[code].empty:
+			log(f'trade_on_sell_signal_check(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的昨日收盘价数据，跳过!')
 			continue
-		pre_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天
-		# log(f'trade_on_sell_signal_check(): {stock} 昨日收盘价: {pre_close:.2f}')
+		pre_close = market_data_yesterday[code]['close'].iloc[0]  # iloc[0]是昨天
+		# log(f'trade_on_sell_signal_check(): {code} 昨日收盘价: {pre_close:.2f}')
 
 		# 计算跌停价 (A股跌停价为昨日收盘价的90%)
 		limit_down_price = round(pre_close * 0.9, 2)
-		# log(f'trade_on_sell_signal_check(): {stock} 跌停价: {limit_down_price:.2f}')
+		# log(f'trade_on_sell_signal_check(): {code} 跌停价: {limit_down_price:.2f}')
 
 		# 条件1: 在14:55时刻，股价相对于昨日收盘价下跌超过3%
 		current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 		if current_time == '14:55:00':
 			pct = (current_price - pre_close) / pre_close * 100
-			# log(f'trade_on_sell_signal_check(): {stock} 涨幅: {pct:.2f}%')
+			# log(f'trade_on_sell_signal_check(): {code} 涨幅: {pct:.2f}%')
 			if pct < -3:
-				log(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 满足条件1: 14:55下跌超过3%，卖出')
-				trade_sell_stock(contextInfo, stock)
+				log(f'trade_on_sell_signal_check(): {code} {get_stock_name(contextInfo, code)} 满足条件1: 14:55下跌超过3%，卖出')
+				trade_sell_stock(contextInfo, code)
 
 		# 条件2: 触及跌停价
 		if current_price <= limit_down_price:
-			log(f'trade_on_sell_signal_check(): {stock} {get_stock_name(contextInfo, stock)} 触及跌停价，卖出')
-			trade_sell_stock(contextInfo, stock)
+			log(f'trade_on_sell_signal_check(): {code} {get_stock_name(contextInfo, code)} 触及跌停价，卖出')
+			trade_sell_stock(contextInfo, code)
 
 def trade_query_info(contextInfo):
 	current_date = datetime.datetime.now().date()
@@ -380,13 +380,13 @@ def trade_query_info(contextInfo):
 
 	return orders, deals, positions, accounts
 	
-def trade_sell_stock(contextInfo, stock):
-	log(f'trade_sell_stock(): stock={stock} {get_stock_name(contextInfo, stock)}')
+def trade_sell_stock(contextInfo, code):
+	log(f'trade_sell_stock(): {code} {get_stock_name(contextInfo, code)}')
 	volume = 0
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	for dt in positions:
 		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-		if full_code != stock:
+		if full_code != code:
 			continue
 		log(f'trade_sell_stock(): 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
@@ -396,16 +396,16 @@ def trade_sell_stock(contextInfo, stock):
 		log(f'trade_sell_stock(): Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
 		return
 	volume = 100  # 测试时先卖100股
-	passorder(T.opType_sell, T.orderType_volume, T.accountid, stock, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
 	log(f'trade_sell_stock(): 卖出 {volume} 股 (测试时先卖100股)')
 
-def trade_buy_stock_at_up_stop_price(contextInfo, stock, buy_amount):
-	# log(f'trade_buy_stock_at_up_stop_price(): {stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
+def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount):
+	# log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
 	# 获取涨停价
-	instrument_detail = contextInfo.get_instrument_detail(stock)
+	instrument_detail = contextInfo.get_instrument_detail(code)
 	up_stop_price = instrument_detail.get('UpStopPrice')
 	if up_stop_price is None or up_stop_price <= 0:
-		log(f'trade_buy_stock_at_up_stop_price(): Error! 无法获取{stock}的涨停价!')
+		log(f'trade_buy_stock_at_up_stop_price(): Error! 无法获取{code}的涨停价!')
 		return
 	# 查询当前账户资金余额
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
@@ -418,11 +418,11 @@ def trade_buy_stock_at_up_stop_price(contextInfo, stock, buy_amount):
 		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, stock, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price(): {stock} {get_stock_name(contextInfo, stock)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.0f}元')
+	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.0f}元')
 
-def trade_buy_stock(contextInfo, stock, buy_amount):
-	log(f'trade_buy_stock(): stock={stock} {get_stock_name(contextInfo, stock)}, buy_amount={buy_amount:.2f}元')
+def trade_buy_stock(contextInfo, code, buy_amount):
+	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
 
 	# 查询当前账户资金余额
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
@@ -438,8 +438,8 @@ def trade_buy_stock(contextInfo, stock, buy_amount):
 		return
 
 	# 使用passorder进行市价买入，orderType=1102表示金额方式
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, stock, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
-	log(f'trade_buy_stock(): {stock} {get_stock_name(contextInfo, stock)} 市价买入金额 {buy_amount:.2f}元')
+	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)} 市价买入金额 {buy_amount:.2f}元')
 	
 def trade_on_market_open(contextInfo):
 	# 确认当前k线的时刻是09:30:00
@@ -451,42 +451,42 @@ def trade_on_market_open(contextInfo):
 
 	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# log(f'trade_on_market_open(): start_time={start_time}, contextInfo.barpos={contextInfo.barpos}')
-	for stock in T.codes_recommendated:
+	for code in T.codes_recommendated:
 		# 获取开盘价 (1分钟K线，count=-1，取09:30:00的开盘价)
-		market_data = contextInfo.get_market_data_ex(['open'], [stock], period='1m', count=1, start_time=bar_time, end_time=bar_time, dividend_type='front', fill_data=False, subscribe=True)
+		market_data = contextInfo.get_market_data_ex(['open'], [code], period='1m', count=1, start_time=bar_time, end_time=bar_time, dividend_type='front', fill_data=False, subscribe=True)
 		# log(f'trade_on_market_open(): market_data={market_data}')
 		open = None
-		for i, stime in enumerate(market_data[stock].index):
+		for i, stime in enumerate(market_data[code].index):
 			dt = pd.to_datetime(str(stime), format='%Y%m%d%H%M%S')
 			if dt.time() == datetime.time(9, 30, 0):
-				open = market_data[stock]['open'].iloc[i]
+				open = market_data[code]['open'].iloc[i]
 				break
 		if open is None:
-			log(f'trade_on_market_open(): Error! {stock} {get_stock_name(contextInfo, stock)} 未找到09:30:00的开盘价数据，跳过!')
+			log(f'trade_on_market_open(): Error! {code} {get_stock_name(contextInfo, code)} 未找到09:30:00的开盘价数据, 跳过!')
 			continue
-		log(f'\ntrade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 开盘价: {open:.2f}')
+		log(f'\ntrade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 开盘价: {open:.2f}')
 
 		# 获取昨日收盘价 (日线数据，count=2，取第1个)
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
+		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
 		# log(f'market_data_yesterday={market_data_yesterday}')
-		pre_close = market_data_yesterday[stock]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
-		log(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 昨日收盘价: {pre_close:.2f}')
+		pre_close = market_data_yesterday[code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
+		log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 昨日收盘价: {pre_close:.2f}')
 
 		# 计算涨幅
 		if pre_close == 0:
-			log(f'trade_on_market_open(): Error! {stock} {get_stock_name(contextInfo, stock)} 昨日收盘价为0，跳过!')
+			log(f'trade_on_market_open(): Error! {code} {get_stock_name(contextInfo, code)} 昨日收盘价为0，跳过!')
 			continue
 		pct = round((open - pre_close) / pre_close * 100, 2)
-		log(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 涨幅: {pct}%')
+		log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 涨幅: {pct}%')
 
 		# 计算5日均价 (日线数据)
-		market_data_ma = contextInfo.get_market_data_ex(['close'], [stock], period='1d', count=5, dividend_type='front', fill_data=False, subscribe=True)
-		ma5 = round(market_data_ma[stock]['close'].mean(), 2)
-		log(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 5日均价: {ma5}')
+		market_data_ma = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=5, dividend_type='front', fill_data=False, subscribe=True)
+		ma5 = round(market_data_ma[code]['close'].mean(), 2)
+		log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 5日均价: {ma5}')
 
 		# 使用 trade_is_to_buy 判断是否买入
-		yesterday_date_str = market_data_yesterday[stock]['close'].index[0]
-		if trade_is_to_buy(contextInfo, stock, open, yesterday_date_str):
+		yesterday_date_str = market_data_yesterday[code]['close'].index[0]
+		if trade_is_to_buy(contextInfo, code, open, yesterday_date_str):
 			# 买入逻辑，根据涨幅决定买入金额
 			if 3 <= pct <= 8:
 				volume = 500
@@ -495,10 +495,10 @@ def trade_on_market_open(contextInfo):
 			else:
 				volume = 100
 			buy_amount = volume * open
-			log(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 满足买入条件，买入金额{buy_amount:.2f}元')
-			trade_buy_stock(contextInfo, stock, buy_amount)
+			log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 满足买入条件，买入金额{buy_amount:.2f}元')
+			trade_buy_stock(contextInfo, code, buy_amount)
 		else:
-			log(f'trade_on_market_open(): {stock} {get_stock_name(contextInfo, stock)} 不满足买入条件')
+			log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 不满足买入条件')
 
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
@@ -507,61 +507,61 @@ def account_callback(contextInfo, accountInfo):
 
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
-	stock = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
-	name = get_stock_name(contextInfo, stock)
+	code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
+	name = get_stock_name(contextInfo, code)
 	full_code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
 	if full_code not in T.codes_all:
 		return
-	# log(f'order_callback(): {stock} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
+	# log(f'order_callback(): {code} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
-		log(f'order_callback(): 委托已全部成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
+		log(f'order_callback(): 委托已全部成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
 	elif orderInfo.m_nOrderStatus == 55:  # 部成
-		log(f'order_callback(): 委托部分成交 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
+		log(f'order_callback(): 委托部分成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
 	elif orderInfo.m_nOrderStatus == 54:  # 已撤
-		log(f'order_callback(): 委托已撤销 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}')
+		log(f'order_callback(): 委托已撤销 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}')
 	else:
 		return
-		# log(f'order_callback(): 委托状态更新 - 股票: {stock} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 状态: {orderInfo.m_nOrderStatus}')
+		# log(f'order_callback(): 委托状态更新 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 状态: {orderInfo.m_nOrderStatus}')
 
 # 成交主推函数
 def deal_callback(contextInfo, dealInfo):
-	stock = f"{dealInfo.m_strInstrumentID}.{dealInfo.m_strExchangeID}"
-	name = get_stock_name(contextInfo, stock)
-	# log(f'deal_callback(): {stock} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
+	code = f"{dealInfo.m_strInstrumentID}.{dealInfo.m_strExchangeID}"
+	name = get_stock_name(contextInfo, code)
+	# log(f'deal_callback(): {code} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
 	# 检查成交结果并记录
-	# log(f'deal_callback(): 成交确认 - 股票: {stock} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
+	# log(f'deal_callback(): 成交确认 - 股票: {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
 	# 可以在这里添加更多逻辑，如更新全局变量、发送通知等
 	# 例如，检查是否为买入或卖出，并更新持仓统计
 	if dealInfo.m_nDirection == 48:  # 买入
-		log(f'deal_callback(): {stock} {name}, 买入成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
+		log(f'deal_callback(): {code} {name}, 买入成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
 	elif dealInfo.m_nDirection == 49:  # 卖出
-		log(f'deal_callback(): {stock} {name}, 卖出成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
+		log(f'deal_callback(): {code} {name}, 卖出成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
-	stock = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
-	name = get_stock_name(contextInfo, stock)
+	code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
+	name = get_stock_name(contextInfo, code)
 	full_code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
 	if full_code not in T.codes_all:
 		return
-	# log(f'position_callback(): {stock} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
+	# log(f'position_callback(): {code} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
 	# 检查持仓变化并记录
-	log(f'position_callback(): 持仓更新 - 股票: {stock} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}')
+	log(f'position_callback(): 持仓更新 - 股票: {code} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}')
 	# 可以在这里添加逻辑，如检查持仓是否为0，触发卖出信号等
 	# if positionInfo.m_nVolume == 0:
-	# 	log(f'position_callback(): 持仓清空 - 股票: {stock} {name}')
+	# 	log(f'position_callback(): 持仓清空 - 股票: {code} {name}')
 	
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
-	stock = f"{passOrderInfo.orderCode}"
-	name = get_stock_name(contextInfo, stock)
-	log(f'\norderError_callback(): 下单错误 - 股票: {stock} {name}, 错误信息: {msg}')
+	code = f"{passOrderInfo.orderCode}"
+	name = get_stock_name(contextInfo, code)
+	log(f'\norderError_callback(): 下单错误 - 股票: {code} {name}, 错误信息: {msg}')
 	# 可以在这里添加逻辑，如重试下单或发送警报
 
-def get_stock_name(contextInfo, stock):
+def get_stock_name(contextInfo, code):
 	try:
-		instrument = contextInfo.get_instrument_detail(stock)
+		instrument = contextInfo.get_instrument_detail(code)
 		return instrument.get('InstrumentName')
 	except:
 		return "get_stock_name(): Error! 未知"
@@ -810,11 +810,11 @@ def data_get_stock_list(contextInfo):
 
 	# 筛选掉ST股票（通过名称过滤）
 	filtered_codes = []
-	for stock in all_stocks:
+	for code in all_stocks:
 		try:
-			name = get_stock_name(contextInfo, stock)
+			name = get_stock_name(contextInfo, code)
 			if name and 'ST' not in name:
-				filtered_codes.append(stock)
+				filtered_codes.append(code)
 		except:
 			print("data_get_stock_list(): Error! get_stock_name() exception!")
 			return []
