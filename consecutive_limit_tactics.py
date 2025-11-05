@@ -84,6 +84,7 @@ def init_load_recommendations_from_db(contextInfo):
 		T.codes_recommendated[df.code]['name'] = df.name
 		T.codes_recommendated[df.code]['r_date'] = df.r_date
 		T.codes_recommendated[df.code]['sell_status'] = ''
+		T.codes_recommendated[df.code]['buy_status'] = ''
 	T.codes_to_sell = T.codes_recommendated.copy()
 	log(f'init_load_recommendations_from_db(): recommendation_date={recommendation_date}, T.codes_recommendated=\n{T.codes_recommendated}')
 	if len(df_filtered) == 0:
@@ -111,10 +112,6 @@ def init_trade_parameters(contextInfo):
 	T.quickTrade = 2 	
 	T.userOrderId = '投资备注'
 	T.price_invalid = -1
-	T.codes_to_buy = []
-	T.codes_to_sell_at_close = []
-	T.codes_to_sell_at_open = []
-	T.codes_to_sell_immediate = []
 	T.SLOPE = np.log(1.1098)
 	T.BUY_THRESHOLD = 1.096
 
@@ -144,22 +141,26 @@ def on_timer(contextInfo):
 			# 	continue
 			recommendation_date = T.codes_recommendated[code]['r_date']
 			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
-			log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
-			if to_buy and code not in T.codes_to_buy:
-				T.codes_to_buy.append(code)
-		log(f'on_timer(): T.codes_to_buy={T.codes_to_buy}')
-		return
+			if to_buy and T.codes_recommendated[code]['buy_status'] == '':
+				log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
+				T.codes_recommendated[code]['buy_status'] = 'BUY_AT_OPEN'
+
+	log(f'on_timer(): T.codes_recommendated={T.codes_recommendated}')
 	# 下单买入
-	if current_time > BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME and len(T.codes_to_buy) > 0:
-		log(f'\non_timer(): current_time={current_time}, buy stock......')
-		amount_of_each_stock = T.cash / len(T.codes_to_buy) / 1000
-		for code in T.codes_to_buy:
+	# 计算标记为'BUY_AT_OPEN'的股票个数
+	if current_time > BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
+		buy_at_open_count = sum(1 for code in T.codes_recommendated if T.codes_recommendated[code].get('buy_status') == 'BUY_AT_OPEN')
+		if buy_at_open_count == 0:
+			log(f'on_timer(): no stocks to buy......')
+			return
+		amount_of_each_stock = T.cash / buy_at_open_count / 1000
+		for code in list(set(T.codes_recommendated.keys())):
+			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_OPEN':
+				continue
 			log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
-			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock)  # 买入1万元
+			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock)
+			T.codes_recommendated[code]['buy_status'] = 'BUY_AT_OPEN_DONE'
 			# 更新qmt数据库? 在回调里做? 待定
-		# Clear the buy list
-		T.codes_to_buy = []
-		return
 	
 def after_init(contextInfo):
 	# 查询当前账户资金余额
