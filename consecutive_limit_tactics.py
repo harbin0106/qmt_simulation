@@ -20,10 +20,7 @@ def init(contextInfo):
 	init_load_codes_in_position(contextInfo)
 	init_load_recommendations_from_excel(contextInfo)
 	init_load_recommendations_from_db(contextInfo)
-
-	T.codes_all = list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys()))
-	log(f'init(): T.codes_all=\n{T.codes_all}')
-	contextInfo.set_universe(T.codes_all)
+	contextInfo.set_universe(list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys())))
 	contextInfo.set_account(T.accountid)
 	# Start the opening call auction timer
 	today = date.today()
@@ -32,11 +29,6 @@ def init(contextInfo):
 	# For testing only
 	# startTime = "2025-10-31 09:15:00"
 	contextInfo.run_time("on_timer", "3nSecond", startTime)
-	return
-	contextInfo.set_slippage(1, 0.003)
-	contextInfo.set_commission(0.0001)
-	contextInfo.max_single_order = 10000
-	contextInfo.max_position = 0.99
 
 def init_load_codes_in_position(contextInfo):
 	# 获取持仓股票代码并加入T.codes_in_position
@@ -47,6 +39,7 @@ def init_load_codes_in_position(contextInfo):
 		if code not in T.codes_in_position:
 			T.codes_in_position[code] = get_stock_name(contextInfo, code)
 			T.codes_in_position[code]['buy_date'] = dt.m_strOpenDate
+			T.codes_in_position[code]['sell_status'] = ''
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
 def init_load_recommendations_from_excel(contextInfo):
@@ -105,6 +98,7 @@ def init_trade_parameters(contextInfo):
 	# 0-卖5价 1-卖4价 2-卖3价 3-卖2价 4-卖1价 5-最新价 6-买1价 7-买2价（组合不支持）8-买3价（组合不支持） 9-买4价（组合不支持）10-买5价（组合不支持）11-（指定价）模型价（只对单股情况支持,对组合交易不支持）12-涨跌停价 13-挂单价 14-对手价
 	T.prType_sell_1 = 4
 	T.prType_buy_1 = 6
+	T.prType_latest = 5
 	T.prType_designated = 11
 	T.strategyName = 'consecutive_limit_tactics'
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
@@ -144,24 +138,24 @@ def on_timer(contextInfo):
 			recommendation_date = T.codes_recommendated[code]['r_date']
 			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
 			if to_buy and T.codes_recommendated[code]['buy_status'] == '':
-				log(f'on_timer(BUY_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
-				T.codes_recommendated[code]['buy_status'] = 'BUY_AT_OPEN'
+				log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
+				T.codes_recommendated[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
 
 	log(f'on_timer(): T.codes_recommendated={T.codes_recommendated}')
 	# 下单买入
-	# 计算标记为'BUY_AT_OPEN'的股票个数
+	# 计算标记为'BUY_AT_CALL_AUCTION'的股票个数
 	if current_time > BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
-		buy_at_open_count = sum(1 for code in T.codes_recommendated if T.codes_recommendated[code].get('buy_status') == 'BUY_AT_OPEN')
+		buy_at_open_count = sum(1 for code in T.codes_recommendated if T.codes_recommendated[code].get('buy_status') == 'BUY_AT_CALL_AUCTION')
 		if buy_at_open_count == 0:
 			log(f'on_timer(): no stocks to buy......')
 			return
 		amount_of_each_stock = trade_get_cash(contextInfo) / buy_at_open_count / 1000
 		for code in list(set(T.codes_recommendated.keys())):
-			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_OPEN':
+			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
 				continue
-			log(f'on_timer(BUY_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
-			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock, 'BUY_AT_OPEN')
-			T.codes_recommendated[code]['buy_status'] = 'BUY_AT_OPEN_DONE'
+			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
+			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
+			T.codes_recommendated[code]['buy_status'] = 'BUY_AT_CALL_AUCTION_DONE'
 			# 更新qmt数据库? 在回调里做? 待定
 	
 def after_init(contextInfo):
