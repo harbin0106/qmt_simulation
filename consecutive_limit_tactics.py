@@ -24,6 +24,9 @@ def init(contextInfo):
 	log(f'init(): T.codes_all=\n{T.codes_all}')
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
+	T.download_mode = False
+	if T.download_mode:
+		return
 	# Start the opening call auction timer
 	today = date.today()
 	# log(f'today={today}')
@@ -162,11 +165,14 @@ def on_timer(contextInfo):
 			# 更新qmt数据库? 在回调里做? 待定
 	
 def after_init(contextInfo):
+	if T.download_mode:
+		data_download_stock(contextInfo)
 	pass
 	# trade_query_info(contextInfo)
-	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
+	if T.download_mode:
+		return
 	# bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# log(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
