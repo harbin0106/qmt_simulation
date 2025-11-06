@@ -47,7 +47,7 @@ def init_load_recommendations_from_excel(contextInfo):
 	# 从Excel文件中读取report_df
 	path = 'C:/a/trade/量化/中信证券/code/'
 	file_name = 'QMT ' + recommendation_date + '.xlsx'
-	print(f'path + file_name={path + file_name}')
+	# log(f'path + file_name={path + file_name}')
 	report_df = pd.read_excel(path + file_name, sheet_name='Report')
 	# 按照日期从小到大排序
 	report_df = report_df.sort_values(by='指定日期T', ascending=True)
@@ -144,12 +144,12 @@ def on_timer(contextInfo):
 	log(f'on_timer(): T.codes_recommendated={T.codes_recommendated}')
 	# 下单买入
 	# 计算标记为'BUY_AT_CALL_AUCTION'的股票个数
-	if current_time > BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
+	if current_time >= BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
 		buy_at_open_count = sum(1 for code in T.codes_recommendated if T.codes_recommendated[code].get('buy_status') == 'BUY_AT_CALL_AUCTION')
 		if buy_at_open_count == 0:
 			log(f'on_timer(): no stocks to buy......')
 			return
-		amount_of_each_stock = trade_get_cash(contextInfo) / buy_at_open_count / 1000
+		amount_of_each_stock = (trade_get_cash(contextInfo) / buy_at_open_count - T.commission_minimum) / (1 + T.commission_rate + T.transfer_fee_rate) / 1000
 		for code in list(set(T.codes_recommendated.keys())):
 			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
 				continue
@@ -161,8 +161,7 @@ def on_timer(contextInfo):
 def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
-	pass
-	# trade_query_info(contextInfo)
+	trade_query_info(contextInfo)
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -341,13 +340,13 @@ def trade_on_sell_signal_check(contextInfo):
 			trade_sell_stock(contextInfo, code, 'SELL_AT_DOWN_STOP')
 
 def trade_query_info(contextInfo):
-	current_date = datetime.datetime.now().date()
-	N_days_ago = current_date - datetime.timedelta(days=7)
+	current_date = datetime.now().date()
+	N_days_ago = current_date - timedelta(days=7)
 	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
 	log("trade_query_info(): 最近7天的委托记录:")
 	for o in orders:
 		try:
-			order_date = datetime.datetime.strptime(o.m_strInsertTime, '%Y%m%d%H%M%S').date()
+			order_date = datetime.strptime(o.m_strInsertTime, '%Y%m%d%H%M%S').date()
 			if order_date >= N_days_ago:
 				log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
 				f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
@@ -360,7 +359,7 @@ def trade_query_info(contextInfo):
 	log("trade_query_info(): 最近7天的成交记录:")
 	for dt in deals:
 		try:
-			deal_date = datetime.datetime.strptime(dt.m_strTime, '%Y%m%d%H%M%S').date()
+			deal_date = datetime.strptime(dt.m_strTime, '%Y%m%d%H%M%S').date()
 			if deal_date >= N_days_ago:
 				log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
 				f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
