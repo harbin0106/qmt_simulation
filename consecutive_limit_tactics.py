@@ -5,6 +5,7 @@ from datetime import datetime, date, time, timedelta
 from dateutil.relativedelta import relativedelta
 import sqlite3
 import time
+import os
 # Global trade variables
 class T():
 	pass
@@ -29,6 +30,7 @@ def init(contextInfo):
 	# For testing only
 	# startTime = "2025-10-31 09:15:00"
 	contextInfo.run_time("on_timer", "3nSecond", startTime)
+	init_open_log_file(contextInfo)
 
 def init_load_codes_in_position(contextInfo):
 	# 获取持仓股票代码并加入T.codes_in_position
@@ -114,6 +116,13 @@ def init_trade_parameters(contextInfo):
 	# 算法参数
 	T.SLOPE = np.log(1.1098)
 	T.BUY_THRESHOLD = 1.096
+
+def init_open_log_file(contextInfo):
+	# 打开日志文件
+	current_date = date.today().strftime('%Y%m%d')
+	path = 'C:/a/trade/量化/中信证券/code/'
+	file_name = 'QMT ' + current_date + ' log.txt'
+	os.startfile(path + file_name)
 
 def on_timer(contextInfo):
 	if not hasattr(on_timer, 'stop_timer'):
@@ -288,8 +297,8 @@ def trade_is_to_buy(contextInfo, code, open, recommendation_date):
 def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='20250923', current_date=None):
 	if current_date is None:
 		current_date = date.today().strftime('%Y%m%d')
-	# 判断recommendation_date早于current_date
-	if recommendation_date >= current_date:
+	# 判断recommendation_date早于current_date，使用日期对象比较
+	if datetime.strptime(recommendation_date, '%Y%m%d').date() >= datetime.strptime(current_date, '%Y%m%d').date():
 		log(f'trade_get_support_price(): Error! recommendation_date {recommendation_date} is not earlier than current_date {current_date}!')
 		return None
 	# 获取从recommendation_date到current_date的收盘价数据
