@@ -162,6 +162,7 @@ def on_timer(contextInfo):
 			# 更新qmt数据库? 在回调里做? 待定
 	
 def after_init(contextInfo):
+	pass
 	# trade_query_info(contextInfo)
 	# data_download_stock(contextInfo)
 
@@ -189,10 +190,12 @@ def trade_on_handle_bar(contextInfo):
 	current_date = date.today().strftime('%Y%m%d')
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if current_date != bar_date:
+		log(f'trade_on_handle_bar(): Error! current_date != bar_date! {current_date}, {bar_date}')
 		return
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	SELL_AT_CLOSE_TIME = '14:56:40'
-	log(f'\ntrade_on_handle_bar(): {T.codes_to_sell}')
+	df = pd.DataFrame.from_dict(T.codes_to_sell, orient='index')
+	log(f'\ntrade_on_handle_bar(): T.codes_to_sell=\n{df.to_string()}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if current_time < SELL_AT_CLOSE_TIME:
@@ -202,7 +205,8 @@ def trade_on_handle_bar(contextInfo):
 			open = market_data_open[code]['open'].iloc[0]
 			# 获取昨日收盘价
 			market_data_pre_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
-			pre_close = market_data_pre_close[code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
+			# iloc[0]是昨天，iloc[1]是今天
+			pre_close = market_data_pre_close[code]['close'].iloc[0]
 			# 获取当前的最新价格
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = market_data_last_price[code]['lastPrice'].iloc[0]
@@ -212,7 +216,7 @@ def trade_on_handle_bar(contextInfo):
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
 			# 	pre_close = open / 1.05
-			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+			# log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 			# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 			if open <= support_price and open <= pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
@@ -381,7 +385,7 @@ def trade_query_info(contextInfo):
 	return orders, deals, positions, accounts
 	
 def trade_sell_stock(contextInfo, code, comment):
-	log(f'trade_sell_stock(): {code} {get_stock_name(contextInfo, code)}')
+	log(f'trade_sell_stock(): {code} {get_stock_name(contextInfo, code)}, {comment}')
 	volume = 0
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	for dt in positions:
