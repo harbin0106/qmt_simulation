@@ -100,7 +100,7 @@ def init_trade_parameters(contextInfo):
 	T.prType_buy_1 = 6
 	T.prType_latest = 5
 	T.prType_designated = 11
-	T.strategyName = 'consecutive_limit_tactics'
+	T.strategyName = 'UpStopTactics'
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
 	T.quickTrade = 2 	
 	T.price_invalid = -1
@@ -280,9 +280,10 @@ def trade_is_to_buy(contextInfo, code, open, recommendation_date):
 		return False
 	pre_close = market_data_recommendation[code]['close'].iloc[0]
 	support_price = trade_get_support_price(contextInfo, code, recommendation_date)
+	result = open >= support_price and open >= pre_close * T.BUY_THRESHOLD
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
-	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', result={open >= support_price and open >= pre_close * T.BUY_THRESHOLD})
-	return open >= support_price and open >= pre_close * T.BUY_THRESHOLD
+	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', result={result})
+	return result
 
 def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='20250923', current_date=None):
 	if current_date is None:
@@ -300,44 +301,6 @@ def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='
 	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
 	# log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommendation_date={recommendation_date}, current_date={current_date}')
 	return support_price
-
-def trade_on_sell_signal_check(contextInfo):
-	log(f'trade_on_sell_signal_check()')
-	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	for code in T.codes_to_sell['股票代码']:
-		# 获取当前股价
-		market_data = contextInfo.get_market_data_ex(['close'], [code], period='tick', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data[code].empty:
-			log(f'trade_on_sell_signal_check(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的当前股价数据，跳过!')
-			continue
-		current_price = market_data[code]['close'].iloc[0]
-		# log(f'trade_on_sell_signal_check(): {code} 当前股价：{current_price:.2f}')
-
-		# 获取昨日收盘价
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data_yesterday[code].empty:
-			log(f'trade_on_sell_signal_check(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的昨日收盘价数据，跳过!')
-			continue
-		pre_close = market_data_yesterday[code]['close'].iloc[0]  # iloc[0]是昨天
-		# log(f'trade_on_sell_signal_check(): {code} 昨日收盘价: {pre_close:.2f}')
-
-		# 计算跌停价 (A股跌停价为昨日收盘价的90%)
-		limit_down_price = round(pre_close * 0.9, 2)
-		# log(f'trade_on_sell_signal_check(): {code} 跌停价: {limit_down_price:.2f}')
-
-		# 条件1: 在14:55时刻，股价相对于昨日收盘价下跌超过3%
-		current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-		if current_time == '14:55:00':
-			pct = (current_price - pre_close) / pre_close * 100
-			# log(f'trade_on_sell_signal_check(): {code} 涨幅: {pct:.2f}%')
-			if pct < -3:
-				log(f'trade_on_sell_signal_check(): {code} {get_stock_name(contextInfo, code)} 满足条件1: 14:55下跌超过3%，卖出')
-				trade_sell_stock(contextInfo, code, 'SELL_AT_DOWN_-3')
-
-		# 条件2: 触及跌停价
-		if current_price <= limit_down_price:
-			log(f'trade_on_sell_signal_check(): {code} {get_stock_name(contextInfo, code)} 触及跌停价，卖出')
-			trade_sell_stock(contextInfo, code, 'SELL_AT_DOWN_STOP')
 
 def trade_query_info(contextInfo):
 	current_date = datetime.now().date()
@@ -423,7 +386,7 @@ def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount, comment):
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.0f}元')
+	log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.2f}元')
 
 def trade_buy_stock(contextInfo, code, buy_amount, comment):
 	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
@@ -447,65 +410,6 @@ def trade_buy_stock(contextInfo, code, buy_amount, comment):
 	# 使用passorder进行市价买入，orderType=1102表示金额方式
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)} 市价买入金额 {buy_amount:.2f}元')
-	
-def trade_on_market_open(contextInfo):
-	# 确认当前k线的时刻是09:30:00
-	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	if current_time != '09:30:00':
-		#log(f'trade_on_market_open(): 当前时间不是09:30:00，当前时间: {current_time}')
-		return
-	# log(f'trade_on_market_open()')
-
-	bar_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
-	# log(f'trade_on_market_open(): start_time={start_time}, contextInfo.barpos={contextInfo.barpos}')
-	for code in T.codes_recommendated:
-		# 获取开盘价 (1分钟K线，count=-1，取09:30:00的开盘价)
-		market_data = contextInfo.get_market_data_ex(['open'], [code], period='1m', count=1, start_time=bar_time, end_time=bar_time, dividend_type='front', fill_data=False, subscribe=True)
-		# log(f'trade_on_market_open(): market_data={market_data}')
-		open = None
-		for i, stime in enumerate(market_data[code].index):
-			dt = pd.to_datetime(str(stime), format='%Y%m%d%H%M%S')
-			if dt.time() == datetime.time(9, 30, 0):
-				open = market_data[code]['open'].iloc[i]
-				break
-		if open is None:
-			log(f'trade_on_market_open(): Error! {code} {get_stock_name(contextInfo, code)} 未找到09:30:00的开盘价数据, 跳过!')
-			continue
-		log(f'\ntrade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 开盘价: {open:.2f}')
-
-		# 获取昨日收盘价 (日线数据，count=2，取第1个)
-		market_data_yesterday = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
-		# log(f'market_data_yesterday={market_data_yesterday}')
-		pre_close = market_data_yesterday[code]['close'].iloc[0]  # iloc[0]是昨天，iloc[1]是今天
-		log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 昨日收盘价: {pre_close:.2f}')
-
-		# 计算涨幅
-		if pre_close == 0:
-			log(f'trade_on_market_open(): Error! {code} {get_stock_name(contextInfo, code)} 昨日收盘价为0，跳过!')
-			continue
-		pct = round((open - pre_close) / pre_close * 100, 2)
-		log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 涨幅: {pct}%')
-
-		# 计算5日均价 (日线数据)
-		market_data_ma = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=5, dividend_type='front', fill_data=False, subscribe=True)
-		ma5 = round(market_data_ma[code]['close'].mean(), 2)
-		log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 5日均价: {ma5}')
-
-		# 使用 trade_is_to_buy 判断是否买入
-		yesterday_date_str = market_data_yesterday[code]['close'].index[0]
-		if trade_is_to_buy(contextInfo, code, open, yesterday_date_str):
-			# 买入逻辑，根据涨幅决定买入金额
-			if 3 <= pct <= 8:
-				volume = 500
-			elif (1 <= pct < 3) or (8 < pct <= 9):
-				volume = 200
-			else:
-				volume = 100
-			buy_amount = volume * open
-			log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 满足买入条件，买入金额{buy_amount:.2f}元')
-			trade_buy_stock(contextInfo, code, buy_amount, 'BUY_AT_UP_3_TO_8')
-		else:
-			log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 不满足买入条件')
 
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
@@ -738,7 +642,6 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 	try:
 		# 用down_history_data下载数据
 		down_history_data(code, '1d', start_date, end_date)
-		# time.sleep(0.1)  # 等待下载完成
 
 		# 用get_market_data_ex获取数据，包括close和pre_close
 		market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [code], period='1d', start_time=start_date, end_time=end_date, count=-1, dividend_type='front', fill_data=False)
@@ -834,7 +737,6 @@ def data_download_stock(contextInfo):
 	"""
 	end_date = date.today().strftime('%Y%m%d')
 	start_date = (date.today() - relativedelta(weeks=2)).strftime('%Y%m%d')
-	# base_delay = 1
 
 	# 初始化数据库
 	data_init_db()
@@ -863,8 +765,6 @@ def data_download_stock(contextInfo):
 					print(f"{code} 数据为空，重试中...")
 			except Exception as e:
 				print(f"data_download_stock(): Error! 获取 {code} 数据失败 (尝试 {attempt + 1}/3): {e}")
-				# delay = base_delay + random.uniform(0, 2)
-				# time.sleep(delay)
 				continue
 
 		if not success:
