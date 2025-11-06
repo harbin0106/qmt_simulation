@@ -118,6 +118,14 @@ def init_trade_parameters(contextInfo):
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
 	T.quickTrade = 2 	
 	T.price_invalid = -1
+	# 佣金
+	T.commission_rate = 0.0001
+	T.commission_minimum = 5
+	# 过户
+	T.transfer_fee_rate = 0.00001
+	# 印花税
+	T.sale_stamp_duty_rate = 0.0005
+	# 算法参数
 	T.SLOPE = np.log(1.1098)
 	T.BUY_THRESHOLD = 1.096
 
@@ -407,9 +415,13 @@ def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount, comment):
 		log(f'trade_buy_stock_at_up_stop_price(): Error! 账号未登录! 请检查!')
 		return
 	available_cash = float(account[0].m_dAvailable)
-	# 检查买入金额是否超过可用资金
-	if buy_amount > available_cash:
-		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
+	# 计算交易费用
+	commission = max(buy_amount * T.commission_rate, T.commission_minimum)
+	transfer_fee = buy_amount * T.transfer_fee_rate
+	total_cost = buy_amount + commission + transfer_fee
+	# 检查总成本是否超过可用资金
+	if total_cost > available_cash:
+		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
