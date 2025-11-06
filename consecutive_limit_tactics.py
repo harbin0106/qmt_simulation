@@ -176,13 +176,7 @@ def handlebar(contextInfo):
 	if not contextInfo.is_last_bar():
 		# log(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
-	trade_is_to_sell(contextInfo)
-	return
-
-	# # 开盘交易逻辑
-	# trade_on_market_open(contextInfo)
-	# # 检查是否出现了卖出信号
-	trade_on_sell_signal_check(contextInfo)
+	trade_on_handle_bar(contextInfo)
 
 def trade_get_cash(contextInfo):
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
@@ -191,14 +185,14 @@ def trade_get_cash(contextInfo):
 		return
 	return float(account[0].m_dAvailable)	
 
-def trade_is_to_sell(contextInfo):
+def trade_on_handle_bar(contextInfo):
 	current_date = date.today().strftime('%Y%m%d')
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if current_date != bar_date:
 		return
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	SELL_AT_CLOSE_TIME = '14:56:40'
-	log(f'\ntrade_is_to_sell(): {T.codes_to_sell}')
+	log(f'\ntrade_on_handle_bar(): {T.codes_to_sell}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if current_time < SELL_AT_CLOSE_TIME:
@@ -218,36 +212,36 @@ def trade_is_to_sell(contextInfo):
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
 			# 	pre_close = open / 1.05
-			log(f'{current_time} trade_is_to_sell(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 			# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 			if open <= support_price and open <= pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_is_to_sell(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
 				continue
 			# 低于支撑线开盘, 且开盘价高于4%, 则以开盘价卖出
 			if open <= support_price and open > pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_is_to_sell(SELL_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN'
 				continue
 			# 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
 			if open > support_price and current <= support_price and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_is_to_sell(SELL_IMMEDIATE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_IMMEDIATE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE'
 				continue
 			# 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
 			# log(f'{open > support_price} {current > support_price} {current < up_stop_price} {current_time >= CHECK_CLOSE_PRICE_TIME} {current_time < SELL_AT_CLOSE_TIME} {T.codes_to_sell[code]["sell_status"] == ""} {current_time}')
 			# log(f'{open} > {support_price} {current} > {support_price} {current} < {up_stop_price} {current_time} >= {CHECK_CLOSE_PRICE_TIME} {current_time} < {SELL_AT_CLOSE_TIME} {T.codes_to_sell[code]["sell_status"] == ""} {current_time}')
 			if open > support_price and current > support_price and current < up_stop_price and current_time >= CHECK_CLOSE_PRICE_TIME and current_time < SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_is_to_sell(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
 				continue
 	
-	# log(f'trade_is_to_sell()1: {T.codes_to_sell}')
+	# log(f'trade_on_handle_bar()1: {T.codes_to_sell}')
 	for code in list(set(T.codes_to_sell.keys())):
 		if  T.codes_to_sell[code]['sell_status'] == '':
 			continue
 		if current_time >= SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE':
-			log(f'trade_is_to_sell(): 当前时间>={SELL_AT_CLOSE_TIME}，卖出以收盘价卖出的股票')
+			log(f'trade_on_handle_bar(): 当前时间>={SELL_AT_CLOSE_TIME}，卖出以收盘价卖出的股票')
 			# 卖出以收盘价卖出的股票
 			trade_sell_stock(contextInfo, code, 'SELL_AT_CLOSE')
 			T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE_DONE'
