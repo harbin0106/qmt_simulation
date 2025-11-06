@@ -13,6 +13,9 @@ class T():
 T = T()
 
 def init(contextInfo):
+	T.download_mode = False
+	if T.download_mode:
+		return
 	log('\n' + '=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
 	init_trade_parameters(contextInfo)
 	db_init()
@@ -24,9 +27,6 @@ def init(contextInfo):
 	log(f'init(): T.codes_all=\n{T.codes_all}')
 	contextInfo.set_universe(T.codes_all)
 	contextInfo.set_account(T.accountid)
-	T.download_mode = False
-	if T.download_mode:
-		return
 	# Start the opening call auction timer
 	today = date.today()
 	# log(f'today={today}')
