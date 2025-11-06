@@ -79,6 +79,10 @@ def init_load_recommendations_from_db(contextInfo):
 		recommendation_date = trading_dates[1]
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
+	# 判断recommendation_date是否是数据库里的最新日期
+	latest_r_date = df_all['r_date'].max()
+	if recommendation_date != latest_r_date:
+		log(f'init_load_recommendations_from_db(): Warning! recommendation_date {recommendation_date} is not the latest in database {latest_r_date}!')
 	df_filtered = df_all[df_all['r_date'] == recommendation_date]
 	for df in df_filtered.itertuples():
 		T.codes_recommendated[df.code] = {}
