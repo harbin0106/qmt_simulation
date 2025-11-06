@@ -1,12 +1,10 @@
 #encoding:gbk
 import pandas as pd
 import numpy as np
-import talib
 from datetime import datetime, date, time, timedelta
 from dateutil.relativedelta import relativedelta
 import sqlite3
 import time
-from xtquant import xtdata
 # Global trade variables
 class T():
 	pass
@@ -16,7 +14,7 @@ def init(contextInfo):
 	T.download_mode = False
 	if T.download_mode:
 		return
-	log('\n' + '=' * 20 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 20)
+	log('\n' + '=' * 30 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 30)
 	init_trade_parameters(contextInfo)
 	db_init()
 	init_load_codes_in_position(contextInfo)
@@ -52,8 +50,12 @@ def init_load_codes_in_position(contextInfo):
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
 def init_load_recommendations_from_excel(contextInfo):
+	recommendation_date = trade_get_previous_trade_date(contextInfo)
 	# 从Excel文件中读取report_df
-	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-05T20-20-44.xlsx', sheet_name='Report')
+	path = 'C:/a/trade/量化/中信证券/code/'
+	file_name = 'QMT ' + recommendation_date + '.xlsx'
+	print(f'path + file_name={path + file_name}')
+	report_df = pd.read_excel(path + file_name, sheet_name='Report')
 	# 按照日期从小到大排序
 	report_df = report_df.sort_values(by='指定日期T', ascending=True)
 	# 去掉不需要的列
@@ -69,17 +71,7 @@ def init_load_recommendations_from_excel(contextInfo):
 def init_load_recommendations_from_db(contextInfo):
 	T.codes_recommendated = {}
 	# 获取上一个交易日
-	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
-	if len(trading_dates) != 2:
-		log(f'init_load_recommendations_from_db(): Error! 未获取到交易日期数据 for stock 000001.SH!')
-		return
-	log(f'init_load_recommendations_from_db(): trading_dates={trading_dates}')
-	# 规避trading_dates不能真实反映当前日期的问题
-	current_date = date.today().strftime('%Y%m%d')
-	if trading_dates[1] == current_date:
-		recommendation_date = trading_dates[0]
-	else:
-		recommendation_date = trading_dates[1]
+	recommendation_date = trade_get_previous_trade_date(contextInfo)
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
 	# 判断recommendation_date是否是数据库里的最新日期
@@ -192,6 +184,19 @@ def handlebar(contextInfo):
 		# log(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
 	trade_on_handle_bar(contextInfo)
+
+def trade_get_previous_trade_date(contextInfo):
+	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
+	if len(trading_dates) != 2:
+		log(f'trade_get_previous_trade_date(): Error! 未获取到交易日期数据 for stock 000001.SH!')
+		return
+	# 规避trading_dates不能真实反映当前日期的问题
+	current_date = date.today().strftime('%Y%m%d')
+	if trading_dates[1] == current_date:
+		recommendation_date = trading_dates[0]
+	else:
+		recommendation_date = trading_dates[1]
+	return recommendation_date
 
 def trade_get_cash(contextInfo):
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
