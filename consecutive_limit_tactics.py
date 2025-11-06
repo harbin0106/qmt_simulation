@@ -138,14 +138,10 @@ def on_timer(contextInfo):
 		# log(f'on_timer(): ticks=\n{ticks}')
 		for code in list(set(T.codes_recommendated.keys())):
 			last_price = ticks[code]['lastPrice']
-			# trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
-			# if len(trading_dates) < 2:
-			# 	log(f'on_timer(): Error! 未获取到交易日期数据 for stock 000001.SH!')
-			# 	continue
 			recommendation_date = T.codes_recommendated[code]['r_date']
 			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
 			if to_buy and T.codes_recommendated[code]['buy_status'] == '':
-				log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
+				log(f'on_timer(BUY_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
 				T.codes_recommendated[code]['buy_status'] = 'BUY_AT_OPEN'
 
 	log(f'on_timer(): T.codes_recommendated={T.codes_recommendated}')
@@ -156,30 +152,17 @@ def on_timer(contextInfo):
 		if buy_at_open_count == 0:
 			log(f'on_timer(): no stocks to buy......')
 			return
-		amount_of_each_stock = T.cash / buy_at_open_count / 1000
+		amount_of_each_stock = trade_get_cash(contextInfo) / buy_at_open_count / 1000
 		for code in list(set(T.codes_recommendated.keys())):
 			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_OPEN':
 				continue
-			log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
+			log(f'on_timer(BUY_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
 			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock, 'BUY_AT_OPEN')
 			T.codes_recommendated[code]['buy_status'] = 'BUY_AT_OPEN_DONE'
 			# 更新qmt数据库? 在回调里做? 待定
 	
 def after_init(contextInfo):
-	# 查询当前账户资金余额
-	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
-	if len(account) == 0:
-		log(f'after_init(): Error! 账号未登录! 请检查!')
-		return
-	T.cash = float(account[0].m_dAvailable)	
-	log(f'after_init(): T.cash={T.cash:.0f} 元')	
-	# account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
-	# if len(account) == 0:
-	# 	log(f'after_init(): Error! 账号{T.accountid} 未登录! 请检查!')
-	# 	return
 	# trade_query_info(contextInfo)
-	# trade_buy_stock(contextInfo, T.codes_all[0], 10000)
-	# trade_buy_stock_at_up_stop_price(contextInfo, '002759.SZ', 10000)
 	# data_download_stock(contextInfo)
 
 def handlebar(contextInfo):
@@ -200,6 +183,13 @@ def handlebar(contextInfo):
 	# trade_on_market_open(contextInfo)
 	# # 检查是否出现了卖出信号
 	trade_on_sell_signal_check(contextInfo)
+
+def trade_get_cash(contextInfo):
+	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
+	if len(account) == 0:
+		log(f'after_init(): Error! 账号未登录! 请检查!')
+		return
+	return float(account[0].m_dAvailable)	
 
 def trade_is_to_sell(contextInfo):
 	current_date = date.today().strftime('%Y%m%d')
