@@ -245,12 +245,11 @@ def trade_on_handle_bar(contextInfo):
 		if  T.codes_to_sell[code]['sell_status'] == '':
 			continue
 		if current_time >= SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE':
-			log(f'trade_on_handle_bar(): 当前时间>={SELL_AT_CLOSE_TIME}，卖出以收盘价卖出的股票')
 			# 卖出以收盘价卖出的股票
 			trade_sell_stock(contextInfo, code, 'SELL_AT_CLOSE')
 			T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE_DONE'
 			continue
-		# 卖出以开盘价卖出的股票. 稍后加入迟滞算法. 如何避免反复进入? 要全局存储标志位, 要写入数据库, 并且在初始化时要加载进来. TODO
+		# 卖出以开盘价卖出的股票. 稍后加入迟滞算法. TODO
 		if T.codes_to_sell[code]['sell_status'] == 'SELL_AT_OPEN':
 			trade_sell_stock(contextInfo, code, 'SELL_AT_OPEN')
 			T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN_DONE'
@@ -263,19 +262,15 @@ def trade_on_handle_bar(contextInfo):
 
 def trade_is_to_buy(contextInfo, code, open, recommendation_date):
 	# 使用 recommendation_date 获取收盘价
-	market_data_recommendation_date = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=recommendation_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-	if market_data_recommendation_date[code].empty:
-		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的昨日收盘价数据!')
+	market_data_recommendation = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=recommendation_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+	if market_data_recommendation[code].empty:
+		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{recommendation_date}收盘价数据!')
 		return False
-	pre_close = market_data_recommendation_date[code]['close'].iloc[0]
+	pre_close = market_data_recommendation[code]['close'].iloc[0]
 	support_price = trade_get_support_price(contextInfo, code, recommendation_date)
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
-	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', {open >= support_price and open >= pre_close * T.BUY_THRESHOLD})
+	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', result={open >= support_price and open >= pre_close * T.BUY_THRESHOLD})
 	return open >= support_price and open >= pre_close * T.BUY_THRESHOLD
-
-def trade_on_buy_signal_check(contextInfo):
-	# log(f'trade_on_buy_signal_check()')	
-	pass
 
 def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='20250923', current_date=None):
 	if current_date is None:
@@ -338,9 +333,6 @@ def trade_query_info(contextInfo):
 	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
 	log("trade_query_info(): 最近7天的委托记录:")
 	for o in orders:
-		full_code = f"{o.m_strInstrumentID}.{o.m_strExchangeID}"
-		if full_code not in T.codes_all:
-			continue
 		try:
 			order_date = datetime.datetime.strptime(o.m_strInsertTime, '%Y%m%d%H%M%S').date()
 			if order_date >= N_days_ago:
@@ -354,9 +346,6 @@ def trade_query_info(contextInfo):
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
 	log("trade_query_info(): 最近7天的成交记录:")
 	for dt in deals:
-		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-		if full_code not in T.codes_all:
-			continue
 		try:
 			deal_date = datetime.datetime.strptime(dt.m_strTime, '%Y%m%d%H%M%S').date()
 			if deal_date >= N_days_ago:
@@ -370,9 +359,6 @@ def trade_query_info(contextInfo):
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	log("trade_query_info(): 当前持仓状态:")
 	for dt in positions:
-		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-		if full_code not in T.codes_all:
-			continue
 		log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
 
@@ -389,8 +375,7 @@ def trade_sell_stock(contextInfo, code, comment):
 	volume = 0
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	for dt in positions:
-		full_code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
-		if full_code != code:
+		if f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}" != code:
 			continue
 		log(f'trade_sell_stock(): 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
@@ -512,9 +497,6 @@ def account_callback(contextInfo, accountInfo):
 def order_callback(contextInfo, orderInfo):
 	code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, code)
-	full_code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
-	if full_code not in T.codes_all:
-		return
 	# log(f'order_callback(): {code} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
@@ -545,9 +527,6 @@ def deal_callback(contextInfo, dealInfo):
 def position_callback(contextInfo, positionInfo):
 	code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
 	name = get_stock_name(contextInfo, code)
-	full_code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
-	if full_code not in T.codes_all:
-		return
 	# log(f'position_callback(): {code} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
 	# 检查持仓变化并记录
 	log(f'position_callback(): 持仓更新 - 股票: {code} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}')
