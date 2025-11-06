@@ -437,9 +437,13 @@ def trade_buy_stock(contextInfo, code, buy_amount, comment):
 	available_cash = float(account[0].m_dAvailable)
 	log(f'trade_buy_stock(): 当前可用资金: {available_cash:.2f}')
 
-	# 检查买入金额是否超过可用资金
-	if buy_amount > available_cash:
-		log(f'trade_buy_stock(): Error! 买入金额{buy_amount:.2f}超过可用资金{available_cash:.2f}，跳过!')
+	# 计算交易费用
+	commission = max(buy_amount * T.commission_rate, T.commission_minimum)
+	transfer_fee = buy_amount * T.transfer_fee_rate
+	total_cost = buy_amount + commission + transfer_fee
+	# 检查总成本是否超过可用资金
+	if total_cost > available_cash:
+		log(f'trade_buy_stock(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
 
 	# 使用passorder进行市价买入，orderType=1102表示金额方式
