@@ -662,7 +662,7 @@ def data_init_db():
 	cursor.execute('''
 	CREATE TABLE IF NOT EXISTS stock_data (
 		code TEXT,
-		trade_date TEXT,
+		date TEXT,
 		open REAL,
 		high REAL,
 		low REAL,
@@ -673,7 +673,7 @@ def data_init_db():
 		turnover_rate REAL,
 		pe REAL,
 		circ_mv REAL,
-		PRIMARY KEY (code, trade_date),
+		PRIMARY KEY (code, date),
 		FOREIGN KEY (code) REFERENCES stocks(code)
 	)
 	''')
@@ -698,11 +698,11 @@ def data_save_stock_data(df):
 		cursor.execute('INSERT OR IGNORE INTO stocks (code, name) VALUES (?, ?)', (code, name))
 
 		# 排序数据按日期
-		df_sorted = df.sort_values('trade_date').reset_index(drop=True)
+		df_sorted = df.sort_values('date').reset_index(drop=True)
 
 		# 插入数据到stock_data表
 		for _, row in df_sorted.iterrows():
-			trade_date = row['trade_date']
+			date = row['date']
 			open = row['open']
 			high = row['high']
 			low = row['low']
@@ -715,7 +715,7 @@ def data_save_stock_data(df):
 			circ_mv = row['circ_mv']
 
 			# 插入stock_data
-			cursor.execute('INSERT OR REPLACE INTO stock_data (code, trade_date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (code, trade_date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv))
+			cursor.execute('INSERT OR REPLACE INTO stock_data (code, date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (code, date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv))
 
 		conn.commit()
 		conn.close()
@@ -745,7 +745,7 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 			return None
 		# print(f'market_data=\n{market_data[code].head()}')
 		df = market_data[code].reset_index()
-		df['trade_date'] = pd.to_datetime(df['stime'], format='%Y%m%d').dt.strftime('%Y%m%d')
+		df['date'] = pd.to_datetime(df['stime'], format='%Y%m%d').dt.strftime('%Y%m%d')
 		df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'preClose': 'pre_close', 'volume': 'volume', 'amount': 'amount'})
 		# print(f'df=\n{df.head()}')
 		df['code'] = code
@@ -757,11 +757,11 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 		# 获取换手率
 		turnover_df = contextInfo.get_turnover_rate([code], start_date, end_date)
 		if not turnover_df.empty:
-			turnover_df['trade_date'] = turnover_df.index.astype(str)
+			turnover_df['date'] = turnover_df.index.astype(str)
 			# 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
 			if code in turnover_df.columns:
 				turnover_df = turnover_df.rename(columns={code: 'turnover_rate'})
-				df = df.merge(turnover_df[['trade_date', 'turnover_rate']], on='trade_date', how='left')
+				df = df.merge(turnover_df[['date', 'turnover_rate']], on='date', how='left')
 			else:
 				df['turnover_rate'] = None
 				print(f'data_download_single_stock_data(): Warning! {code} 的换手率数据列不存在')
@@ -774,7 +774,7 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 			pe_data = contextInfo.get_financial_data(['利润表.净利润', 'CAPITALSTRUCTURE.circulating_capital', 'CAPITALSTRUCTURE.total_capital'], [code], start_date, end_date, report_type='report_time')
 			if pe_data is not None and not pe_data.empty:
 				# pe_data的索引是日期，列是s_fa_eps_basic, circulating_capital
-				df = df.merge(pe_data, left_on='trade_date', right_index=True, how='left')
+				df = df.merge(pe_data, left_on='date', right_index=True, how='left')
 				# 计算市盈率
 				# df['pe'] = df.apply(lambda row: row['close'] * row['total_capital'] / row['净利润'] if pd.notna(row['净利润']) and row['净利润'] != 0 else None, axis=1)
 				df['pe'] = np.nan
@@ -790,7 +790,7 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 			df['circ_mv'] = None
 
 		# 选择需要的列
-		df = df[['code', 'name', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
+		df = df[['code', 'name', 'date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv']]
 
 		return df
 	except Exception as e:
@@ -889,11 +889,11 @@ def data_load_stock(code, start_date='20200101'):
 
 		# 查询指定股票数据
 		cursor.execute('''
-			SELECT d.code, d.trade_date, d.open, d.high, d.low, d.close, d.pre_close, d.volume, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
+			SELECT d.code, d.date, d.open, d.high, d.low, d.close, d.pre_close, d.volume, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
 			FROM stocks s
 			JOIN stock_data d ON s.code = d.code
-			WHERE d.code = ? AND d.trade_date >= ?
-			ORDER BY d.trade_date
+			WHERE d.code = ? AND d.date >= ?
+			ORDER BY d.date
 		''', (code, start_date))
 		rows = cursor.fetchall()
 
@@ -901,12 +901,12 @@ def data_load_stock(code, start_date='20200101'):
 			return pd.DataFrame(columns=columns)
 
 		# 转换为DataFrame
-		df = pd.DataFrame(rows, columns=['code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
+		df = pd.DataFrame(rows, columns=['code', 'date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'turnover_rate', 'pe', 'circ_mv', 'name'])
 		# 重命名列为中文
 		df = df.rename(columns={
 			'code': '股票代码',
 			'name': '股票名称',
-			'trade_date': '日期',
+			'date': '日期',
 			'open': '开盘',
 			'close': '收盘',
 			'pre_close': '前收盘',
