@@ -171,8 +171,8 @@ def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
-	# trade_buy_stock_at_up_stop_price(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock_at_up_stop_price()')
-	trade_buy_stock(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock()')
+	trade_buy_stock_at_up_stop_price(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price()')
+	# trade_buy_stock(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock()')
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -395,9 +395,13 @@ def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount, comment):
 	if total_cost > available_cash:
 		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
+	volume = int(buy_amount / up_stop_price // 100) * 100
+	if volume == 0:
+		log(f'trade_buy_stock_at_up_stop_price(): Error! 资金不足! 可买手数为0!')
+		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.2f}元')
+	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
+	log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.2f}元')
 
 def trade_buy_stock(contextInfo, code, buy_amount, comment):
 	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
