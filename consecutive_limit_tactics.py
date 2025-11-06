@@ -93,7 +93,7 @@ def init_load_recommendations_from_db(contextInfo):
 	T.codes_to_sell = T.codes_recommendated.copy()
 	log(f'init_load_recommendations_from_db(): recommendation_date={recommendation_date}, T.codes_recommendated=\n{T.codes_recommendated}')
 	if len(df_filtered) == 0:
-		log(f'init_load_recommendations_from_db(): Error! Number of recommendation is 0!')
+		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -107,15 +107,13 @@ def init_trade_parameters(contextInfo):
 	T.orderType_volume = 1101
 	# 单股、单账号、普通、金额方式下单
 	T.orderType_amount = 1102
-	# 0：卖5价 1：卖4价 2：卖3价 3：卖2价 4：卖1价 5：最新价 6：买1价 7：买2价（组合不支持）8：买3价（组合不支持） 9：买4价（组合不支持）10：买5价（组合不支持）11：（指定价）模型价（只对单股情况支持,对组合交易不支持）12：涨跌停价 13：挂单价 14：对手价
+	# 0-卖5价 1-卖4价 2-卖3价 3-卖2价 4-卖1价 5-最新价 6-买1价 7-买2价（组合不支持）8-买3价（组合不支持） 9-买4价（组合不支持）10-买5价（组合不支持）11-（指定价）模型价（只对单股情况支持,对组合交易不支持）12-涨跌停价 13-挂单价 14-对手价
 	T.prType_sell_1 = 4
 	T.prType_buy_1 = 6
 	T.prType_designated = 11
-	T.volume = 100
 	T.strategyName = 'consecutive_limit_tactics'
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
 	T.quickTrade = 2 	
-	T.userOrderId = '投资备注'
 	T.price_invalid = -1
 	T.SLOPE = np.log(1.1098)
 	T.BUY_THRESHOLD = 1.096
@@ -163,7 +161,7 @@ def on_timer(contextInfo):
 			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_OPEN':
 				continue
 			log(f'on_timer(): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
-			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock)
+			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock, 'BUY_AT_OPEN')
 			T.codes_recommendated[code]['buy_status'] = 'BUY_AT_OPEN_DONE'
 			# 更新qmt数据库? 在回调里做? 待定
 	
@@ -180,7 +178,6 @@ def after_init(contextInfo):
 	# 	log(f'after_init(): Error! 账号{T.accountid} 未登录! 请检查!')
 	# 	return
 	# trade_query_info(contextInfo)
-	# trade_sell_stock(contextInfo, T.codes_all[8])
 	# trade_buy_stock(contextInfo, T.codes_all[0], 10000)
 	# trade_buy_stock_at_up_stop_price(contextInfo, '002759.SZ', 10000)
 	# data_download_stock(contextInfo)
@@ -262,17 +259,17 @@ def trade_is_to_sell(contextInfo):
 		if current_time >= SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE':
 			log(f'trade_is_to_sell(): 当前时间>={SELL_AT_CLOSE_TIME}，卖出以收盘价卖出的股票')
 			# 卖出以收盘价卖出的股票
-			trade_sell_stock(contextInfo, code)
+			trade_sell_stock(contextInfo, code, 'SELL_AT_CLOSE')
 			T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE_DONE'
 			continue
 		# 卖出以开盘价卖出的股票. 稍后加入迟滞算法. 如何避免反复进入? 要全局存储标志位, 要写入数据库, 并且在初始化时要加载进来. TODO
 		if T.codes_to_sell[code]['sell_status'] == 'SELL_AT_OPEN':
-			trade_sell_stock(contextInfo, code)
+			trade_sell_stock(contextInfo, code, 'SELL_AT_OPEN')
 			T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN_DONE'
 			continue
 		# 卖出立即卖出的股票
 		if T.codes_to_sell[code]['sell_status'] == 'SELL_IMMEDIATE':
-			trade_sell_stock(contextInfo, code)
+			trade_sell_stock(contextInfo, code, 'SELL_IMMEDIATE')
 			T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE_DONE'
 			continue
 
@@ -340,12 +337,12 @@ def trade_on_sell_signal_check(contextInfo):
 			# log(f'trade_on_sell_signal_check(): {code} 涨幅: {pct:.2f}%')
 			if pct < -3:
 				log(f'trade_on_sell_signal_check(): {code} {get_stock_name(contextInfo, code)} 满足条件1: 14:55下跌超过3%，卖出')
-				trade_sell_stock(contextInfo, code)
+				trade_sell_stock(contextInfo, code, 'SELL_AT_DOWN_-3')
 
 		# 条件2: 触及跌停价
 		if current_price <= limit_down_price:
 			log(f'trade_on_sell_signal_check(): {code} {get_stock_name(contextInfo, code)} 触及跌停价，卖出')
-			trade_sell_stock(contextInfo, code)
+			trade_sell_stock(contextInfo, code, 'SELL_AT_DOWN_STOP')
 
 def trade_query_info(contextInfo):
 	current_date = datetime.datetime.now().date()
@@ -399,7 +396,7 @@ def trade_query_info(contextInfo):
 
 	return orders, deals, positions, accounts
 	
-def trade_sell_stock(contextInfo, code):
+def trade_sell_stock(contextInfo, code, comment):
 	log(f'trade_sell_stock(): {code} {get_stock_name(contextInfo, code)}')
 	volume = 0
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
@@ -415,10 +412,10 @@ def trade_sell_stock(contextInfo, code):
 		log(f'trade_sell_stock(): Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
 		return
 	volume = 100  # 测试时先卖100股
-	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_sell_stock(): 卖出 {volume} 股 (测试时先卖100股)')
 
-def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount):
+def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount, comment):
 	# log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
 	# 获取涨停价
 	instrument_detail = contextInfo.get_instrument_detail(code)
@@ -437,12 +434,11 @@ def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount):
 		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_designated, up_stop_price, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入金额 {buy_amount:.0f}元')
 
-def trade_buy_stock(contextInfo, code, buy_amount):
+def trade_buy_stock(contextInfo, code, buy_amount, comment):
 	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
-
 	# 查询当前账户资金余额
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
 	if len(account) == 0:
@@ -457,7 +453,7 @@ def trade_buy_stock(contextInfo, code, buy_amount):
 		return
 
 	# 使用passorder进行市价买入，orderType=1102表示金额方式
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, T.userOrderId, contextInfo)
+	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)} 市价买入金额 {buy_amount:.2f}元')
 	
 def trade_on_market_open(contextInfo):
@@ -515,7 +511,7 @@ def trade_on_market_open(contextInfo):
 				volume = 100
 			buy_amount = volume * open
 			log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 满足买入条件，买入金额{buy_amount:.2f}元')
-			trade_buy_stock(contextInfo, code, buy_amount)
+			trade_buy_stock(contextInfo, code, buy_amount, 'BUY_AT_UP_3_TO_8')
 		else:
 			log(f'trade_on_market_open(): {code} {get_stock_name(contextInfo, code)} 不满足买入条件')
 
