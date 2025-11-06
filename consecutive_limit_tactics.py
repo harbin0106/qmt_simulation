@@ -44,12 +44,13 @@ def init_load_codes_in_position(contextInfo):
 	for dt in positions:
 		code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
 		if code not in T.codes_in_position:
-			T.codes_in_position[code] = get_stock_name(contextInfo, full_code)
+			T.codes_in_position[code] = get_stock_name(contextInfo, code)
+			T.codes_in_position[code]['buy_date'] = dt.m_strOpenDate
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
 def init_load_recommendations_from_excel(contextInfo):
 	# 从Excel文件中读取report_df
-	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-05T08-49-21.xlsx', sheet_name='Report')
+	report_df = pd.read_excel('C:/a/trade/量化/中信证券/code/龙头股票筛选结果2025-11-05T20-20-44.xlsx', sheet_name='Report')
 	# 按照日期从小到大排序
 	report_df = report_df.sort_values(by='指定日期T', ascending=True)
 	# 去掉不需要的列
@@ -209,7 +210,7 @@ def trade_is_to_sell(contextInfo):
 	log(f'\ntrade_is_to_sell(): {T.codes_to_sell}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	if current_time < SELL_AT_CLOSE_TIME or True:
+	if current_time < SELL_AT_CLOSE_TIME:
 		for code in list(set(T.codes_to_sell.keys())):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
