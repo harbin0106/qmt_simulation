@@ -105,7 +105,7 @@ def init_trade_parameters(contextInfo):
 	T.strategyName = 'UpStopTactics'
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
 	T.quickTrade = 2 	
-	T.price_invalid = -1
+	T.price_invalid = 0
 	# 佣金
 	T.commission_rate = 0.0001
 	T.commission_minimum = 5
@@ -171,6 +171,8 @@ def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
+	# trade_buy_stock_at_up_stop_price(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock_at_up_stop_price()')
+	trade_buy_stock(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock()')
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -416,8 +418,8 @@ def trade_buy_stock(contextInfo, code, buy_amount, comment):
 		log(f'trade_buy_stock(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
 
-	# 使用passorder进行市价买入，orderType=1102表示金额方式
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
+	# 使用passorder进行市价买入
+	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_latest, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)} 市价买入金额 {buy_amount:.2f}元')
 
 def account_callback(contextInfo, accountInfo):
