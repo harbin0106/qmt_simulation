@@ -569,7 +569,11 @@ def get_stock_name(contextInfo, code):
 
 def log(*args):
 	message = ' '.join(str(arg) for arg in args)
-	with open(r'C:\a\trade\量化\中信证券\code\QMT.txt', 'a', encoding='utf-8') as f:
+	message = '\t' + message
+	current_date = date.today().strftime('%Y%m%d')
+	path = 'C:/a/trade/量化/中信证券/code/'
+	file_name = 'QMT ' + current_date + ' log.txt'
+	with open(path + file_name, 'a', encoding='utf-8') as f:
 		f.write(message + '\n')
 
 def db_init():
