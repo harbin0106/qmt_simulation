@@ -163,7 +163,7 @@ def on_timer(contextInfo):
 			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
 				continue
 			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
-			trade_buy_stock_at_up_stop_price(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
+			trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
 			T.codes_recommendated[code]['buy_status'] = 'BUY_AT_CALL_AUCTION_DONE'
 			# 更新qmt数据库? 在回调里做? 待定
 	
@@ -171,7 +171,7 @@ def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
-	# trade_buy_stock_at_up_stop_price(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price()')
+	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
 	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommendated.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
 	trade_buy_stock_by_volume(contextInfo, list(T.codes_recommendated.keys())[0], 100, 'test trade_buy_stock_by_volume()')
 
@@ -364,18 +364,18 @@ def trade_sell_stock(contextInfo, code, comment):
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_sell_stock(): {code} {get_stock_name(contextInfo, code)}, {comment}, 卖出 {volume} 股 (测试时先卖100股)')
 
-def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount, comment):
-	# log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
+def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, comment):
+	# log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
 	# 获取涨停价
 	instrument_detail = contextInfo.get_instrument_detail(code)
 	up_stop_price = instrument_detail.get('UpStopPrice')
 	if up_stop_price is None or up_stop_price <= 0:
-		log(f'trade_buy_stock_at_up_stop_price(): Error! 无法获取{code}的涨停价!')
+		log(f'trade_buy_stock_at_up_stop_price_by_amount(): Error! 无法获取{code}的涨停价!')
 		return
 	# 查询当前账户资金余额
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
 	if len(account) == 0:
-		log(f'trade_buy_stock_at_up_stop_price(): Error! 账号未登录! 请检查!')
+		log(f'trade_buy_stock_at_up_stop_price_by_amount(): Error! 账号未登录! 请检查!')
 		return
 	available_cash = float(account[0].m_dAvailable)
 	# 计算交易费用
@@ -384,15 +384,15 @@ def trade_buy_stock_at_up_stop_price(contextInfo, code, buy_amount, comment):
 	total_cost = buy_amount + commission + transfer_fee
 	# 检查总成本是否超过可用资金
 	if total_cost > available_cash:
-		log(f'trade_buy_stock_at_up_stop_price(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
+		log(f'trade_buy_stock_at_up_stop_price_by_amount(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
 		return
 	volume = int(buy_amount / up_stop_price // 100) * 100
 	if volume == 0:
-		log(f'trade_buy_stock_at_up_stop_price(): Error! 资金不足! 可买手数为0!')
+		log(f'trade_buy_stock_at_up_stop_price_by_amount(): Error! 资金不足! 可买手数为0!')
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.2f}元')
+	log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.2f}元')
 
 def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 	log(f'trade_buy_stock_by_amount(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
