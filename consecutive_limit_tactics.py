@@ -319,28 +319,18 @@ def trade_query_info(contextInfo):
 	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
 	log("trade_query_info(): 最近7天的委托记录:")
 	for o in orders:
-		try:
-			order_date = datetime.strptime(o.m_strInsertTime, '%Y%m%d%H%M%S').date()
-			if order_date >= N_days_ago:
-				log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
-				f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
-		except (AttributeError, ValueError):
-			# 如果没有时间字段或格式不匹配，打印所有
-			log(f'trade_query_info(): Error! {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
-			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额:{o.m_dTradeAmount}')
+		order_date = datetime.strptime(o.m_strInsertDate, '%Y%m%d').date()
+		if order_date >= N_days_ago:
+			log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
+			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice}, 成交数量: {o.m_nVolumeTraded}, 成交金额: {o.m_dTradeAmount}, 委托时间: {o.m_strInsertDate} T {o.m_strInsertTime}')
 
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
 	log("trade_query_info(): 最近7天的成交记录:")
 	for dt in deals:
-		try:
-			deal_date = datetime.strptime(dt.m_strTime, '%Y%m%d%H%M%S').date()
-			if deal_date >= N_days_ago:
-				log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
-				f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
-		except (AttributeError, ValueError):
-			# 如果没有时间字段或格式不匹配，打印所有
-			log(f'trade_query_info(): Error! {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
-			f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}')
+		deal_date = datetime.strptime(dt.m_strTradeDate, '%Y%m%d').date()
+		if deal_date >= N_days_ago:
+			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
+			f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}, 成交时间: {o.m_strTradeDate} T {o.m_strTradeTime}')
 
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	log("trade_query_info(): 当前持仓状态:")
