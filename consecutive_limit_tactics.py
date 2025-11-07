@@ -54,7 +54,7 @@ def init_load_codes_in_position(contextInfo):
 		if code not in T.codes_in_position:
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
-			T.codes_in_position[code]['buy_date'] = buy_dates[code]  # 使用成交日期
+			T.codes_in_position[code]['buy_date'] = buy_dates.get(code, '')  # 使用成交日期
 			T.codes_in_position[code]['r_date'] = ''
 			T.codes_in_position[code]['sell_status'] = ''
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
@@ -207,12 +207,18 @@ def handlebar(contextInfo):
 	trade_on_handle_bar(contextInfo)
 
 def trade_get_previous_trade_date(contextInfo):
+	today = date.today()
+	current_date = today.strftime('%Y%m%d')
+	# 否则返回之前的交易日
 	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
 	if len(trading_dates) != 2:
-		log(f'trade_get_previous_trade_date(): Error! 未获取到交易日期数据 for stock 000001.SH!')
-		return
+		log(f'trade_get_previous_trade_date(): Error! 未获取到交易日期数据 for stock 000001.SH! trading_dates={trading_dates}')
+		# 如果今日是周六或者周日, 返回最近的周五
+		if today.weekday() >= 5:
+			previous_trade_date = today - timedelta(days=today.weekday()-4)
+			return previous_trade_date.strftime('%Y%m%d')
+		return today.strftime('%Y%m%d')
 	# 规避trading_dates不能真实反映当前日期的问题
-	current_date = date.today().strftime('%Y%m%d')
 	if trading_dates[1] == current_date:
 		recommendation_date = trading_dates[0]
 	else:
