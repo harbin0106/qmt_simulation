@@ -394,6 +394,39 @@ def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, co
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.2f}元')
 
+def trade_buy_stock_at_up_stop_price_by_volume(contextInfo, code, volume, comment):
+	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {get_stock_name(contextInfo, code)}, volume={volume} 股')
+	# 检查volume是否为100的倍数
+	if volume % 100 != 0 or volume < 100:
+		log(f'trade_buy_stock_at_up_stop_price_by_volume(): Error! 买入股数{volume} 不是100的倍数或小于100股，跳过!')
+		return
+	# 获取涨停价
+	instrument_detail = contextInfo.get_instrument_detail(code)
+	up_stop_price = instrument_detail.get('UpStopPrice')
+	if up_stop_price is None or up_stop_price <= 0:
+		log(f'trade_buy_stock_at_up_stop_price_by_volume(): Error! 无法获取{code}的涨停价!')
+		return
+	# 查询当前账户资金余额
+	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
+	if len(account) == 0:
+		log(f'trade_buy_stock_at_up_stop_price_by_volume(): Error! 账号未登录! 请检查!')
+		return
+	available_cash = float(account[0].m_dAvailable)
+	log(f'trade_buy_stock_at_up_stop_price_by_volume(): 当前可用资金: {available_cash:.2f}')
+	# 计算买入金额
+	buy_amount = volume * up_stop_price
+	# 计算交易费用
+	commission = max(buy_amount * T.commission_rate, T.commission_minimum)
+	transfer_fee = buy_amount * T.transfer_fee_rate
+	total_cost = buy_amount + commission + transfer_fee
+	# 检查总成本是否超过可用资金
+	if total_cost > available_cash:
+		log(f'trade_buy_stock_at_up_stop_price_by_volume(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
+		return
+	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
+	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
+	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入 {volume} 股，预计成交金额 {buy_amount:.2f} 元')
+
 def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 	log(f'trade_buy_stock_by_amount(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
 	# 查询当前账户资金余额
