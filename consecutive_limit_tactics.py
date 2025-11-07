@@ -15,7 +15,7 @@ def init(contextInfo):
 	T.download_mode = False
 	if T.download_mode:
 		return
-	log('\n' + '=' * 30 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 30)
+	log('\n' + '=' * 40 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 40)
 	init_trade_parameters(contextInfo)
 	db_init()
 	init_load_codes_in_position(contextInfo)
@@ -36,11 +36,26 @@ def init_load_codes_in_position(contextInfo):
 	# 获取持仓股票代码并加入T.codes_in_position
 	T.codes_in_position = {}
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
+	codes = {f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}" for dt in positions}
+
+	# 获取成交记录，筛选买入操作，记录首次买入日期
+	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
+	buy_dates = {}
+	for deal in deals:
+		code = f"{deal.m_strInstrumentID}.{deal.m_strExchangeID}"
+		if code in codes and deal.m_nDirection == 48:  # 48 表示买入
+			trade_date = deal.m_strTradeDate
+			if code not in buy_dates or trade_date < buy_dates[code]:
+				buy_dates[code] = trade_date
+
+	# 构建 T.codes_in_position
 	for dt in positions:
 		code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
 		if code not in T.codes_in_position:
-			T.codes_in_position[code] = get_stock_name(contextInfo, code)
-			T.codes_in_position[code]['buy_date'] = dt.m_strOpenDate
+			T.codes_in_position[code] = {}
+			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
+			T.codes_in_position[code]['buy_date'] = buy_dates[code]  # 使用成交日期
+			T.codes_in_position[code]['r_date'] = ''
 			T.codes_in_position[code]['sell_status'] = ''
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
@@ -173,7 +188,8 @@ def after_init(contextInfo):
 	trade_query_info(contextInfo)
 	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
 	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommendated.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
-	trade_buy_stock_by_volume(contextInfo, list(T.codes_recommendated.keys())[0], 100, 'test trade_buy_stock_by_volume()')
+	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommendated.keys())[2], 100, 'test trade_buy_stock_by_volume()')
+	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommendated.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -219,7 +235,7 @@ def trade_on_handle_bar(contextInfo):
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	SELL_AT_CLOSE_TIME = '14:56:40'
 	df = pd.DataFrame.from_dict(T.codes_to_sell, orient='index')
-	log(f'\ntrade_on_handle_bar(): T.codes_to_sell=\n{df.to_string()}')
+	# log(f'\ntrade_on_handle_bar(): T.codes_to_sell=\n{df.to_string()}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if current_time < SELL_AT_CLOSE_TIME:
@@ -331,7 +347,7 @@ def trade_query_info(contextInfo):
 		deal_date = datetime.strptime(dt.m_strTradeDate, '%Y%m%d').date()
 		if deal_date >= N_days_ago:
 			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
-			f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}, 成交时间: {o.m_strTradeDate} T {o.m_strTradeTime}')
+			f'成交价格: {dt.m_dPrice}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount}, 成交时间: {dt.m_strTradeDate} T {dt.m_strTradeTime}')
 
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	log("trade_query_info(): 当前持仓状态:")
