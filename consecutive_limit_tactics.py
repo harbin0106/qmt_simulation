@@ -172,7 +172,8 @@ def after_init(contextInfo):
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
 	# trade_buy_stock_at_up_stop_price(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price()')
-	trade_buy_stock(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock()')
+	# trade_buy_stock(contextInfo, list(T.codes_recommendated.keys())[0], 3000, 'test trade_buy_stock()')
+	trade_buy_stock_by_volume(contextInfo, list(T.codes_recommendated.keys())[0], 100, 'test trade_buy_stock_by_volume()')
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -432,6 +433,43 @@ def trade_buy_stock(contextInfo, code, buy_amount, comment):
 	# 使用passorder进行市价买入
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_latest, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock(): {code} {get_stock_name(contextInfo, code)} 市价买入金额 {buy_amount:.2f}元')
+
+def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
+	log(f'trade_buy_stock_by_volume(): {code} {get_stock_name(contextInfo, code)}, volume={volume} 股')
+	# 检查volume是否为100的倍数
+	if volume % 100 != 0 or volume < 100:
+		log(f'trade_buy_stock_by_volume(): Error! 买入股数{volume} 不是100的倍数或小于100股，跳过!')
+		return
+	# 查询当前账户资金余额
+	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
+	if len(account) == 0:
+		log(f'trade_buy_stock_by_volume(): Error! 账号未登录! 请检查!')
+		return
+	available_cash = float(account[0].m_dAvailable)
+	log(f'trade_buy_stock_by_volume(): 当前可用资金: {available_cash:.2f}')
+
+	# 获取当前最新股价
+	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+	if code not in market_data or market_data[code].empty:
+		log(f'trade_buy_stock_by_volume(): Error! 无法获取{code} {get_stock_name(contextInfo, code)}的最新股价!')
+		return
+	last_price = market_data[code]['lastPrice'].iloc[0]
+	log(f'trade_buy_stock_by_volume(): 当前最新股价: {last_price:.2f}')
+
+	# 计算成交金额
+	trade_amount = volume * last_price
+	# 计算交易费用
+	commission = max(trade_amount * T.commission_rate, T.commission_minimum)
+	transfer_fee = trade_amount * T.transfer_fee_rate
+	total_cost = trade_amount + commission + transfer_fee
+	# 检查总成本是否超过可用资金
+	if total_cost > available_cash:
+		log(f'trade_buy_stock_by_volume(): Error! 买入金额{trade_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
+		return
+
+	# 使用passorder进行市价买入，按股数
+	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_latest, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
+	log(f'trade_buy_stock_by_volume(): {code} {get_stock_name(contextInfo, code)} 市价买入 {volume} 股，预计成交金额 {trade_amount:.2f} 元')
 
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
