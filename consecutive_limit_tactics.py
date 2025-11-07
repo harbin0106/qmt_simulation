@@ -171,8 +171,8 @@ def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
-	trade_buy_stock_at_up_stop_price(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price()')
-	# trade_buy_stock(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock()')
+	# trade_buy_stock_at_up_stop_price(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price()')
+	trade_buy_stock(contextInfo, list(T.codes_recommendated.keys())[0], 1000, 'test trade_buy_stock()')
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -410,6 +410,23 @@ def trade_buy_stock(contextInfo, code, buy_amount, comment):
 	# 检查总成本是否超过可用资金
 	if total_cost > available_cash:
 		log(f'trade_buy_stock(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
+		return
+	#获取当前最新股价, 计算是否能够买入大于100股股票
+	# 获取当前最新股价
+	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+	if code not in market_data or market_data[code].empty:
+		log(f'trade_buy_stock(): Error! 无法获取{code} {get_stock_name(contextInfo, code)}的最新股价!')
+		return
+	last_price = market_data[code]['lastPrice'].iloc[0]
+	log(f'trade_buy_stock(): 当前最新股价: {last_price:.2f}')
+	# 计算买入100股的成本
+	min_volume = 100
+	min_cost = min_volume * last_price
+	commission_min = max(min_cost * T.commission_rate, T.commission_minimum)
+	transfer_fee_min = min_cost * T.transfer_fee_rate
+	total_min_cost = min_cost + commission_min + transfer_fee_min
+	if total_min_cost > buy_amount:
+		log(f'trade_buy_stock(): Error! 买入金额不足! 买入最少100股需要总成本{total_min_cost:.2f} 元，超过买入金额 {buy_amount:.2f} 元，跳过!')
 		return
 
 	# 使用passorder进行市价买入
