@@ -19,9 +19,9 @@ def init(contextInfo):
 	init_trade_parameters(contextInfo)
 	db_init()
 	init_load_codes_in_position(contextInfo)
-	init_load_recommendations_from_excel(contextInfo)
+	# init_load_recommendations_from_excel(contextInfo)
 	init_load_recommendations_from_db(contextInfo)
-	contextInfo.set_universe(list(set(T.codes_recommendated.keys()) | set(T.codes_in_position.keys())))
+	contextInfo.set_universe(list(set(T.codes_recommended.keys()) | set(T.codes_in_position.keys())))
 	contextInfo.set_account(T.accountid)
 	# Start the opening call auction timer
 	today = date.today()
@@ -43,6 +43,7 @@ def init_load_codes_in_position(contextInfo):
 	buy_dates = {}
 	for deal in deals:
 		code = f"{deal.m_strInstrumentID}.{deal.m_strExchangeID}"
+		print(f'deal = {deal}')
 		if code in codes and deal.m_nDirection == 48:  # 48 表示买入
 			trade_date = deal.m_strTradeDate
 			if code not in buy_dates or trade_date < buy_dates[code]:
@@ -55,15 +56,15 @@ def init_load_codes_in_position(contextInfo):
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
 			T.codes_in_position[code]['buy_date'] = buy_dates.get(code, '')  # 使用成交日期
-			T.codes_in_position[code]['r_date'] = ''
+			T.codes_in_position[code]['recommend_date'] = ''
 			T.codes_in_position[code]['sell_status'] = ''
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
 def init_load_recommendations_from_excel(contextInfo):
-	recommendation_date = trade_get_previous_trade_date(contextInfo)
+	recommend_date = trade_get_previous_trade_date(contextInfo)
 	# 从Excel文件中读取report_df
 	path = 'C:/a/trade/量化/中信证券/code/'
-	file_name = 'QMT ' + recommendation_date + '.xlsx'
+	file_name = 'QMT ' + recommend_date + '.xlsx'
 	# log(f'path + file_name={path + file_name}')
 	report_df = pd.read_excel(path + file_name, sheet_name='Report')
 	# 按照日期从小到大排序
@@ -79,24 +80,24 @@ def init_load_recommendations_from_excel(contextInfo):
 		db_save_stock_status(code, name, r_date, None, None, None, None)
 
 def init_load_recommendations_from_db(contextInfo):
-	T.codes_recommendated = {}
+	T.codes_recommended = {}
 	# 获取上一个交易日
-	recommendation_date = trade_get_previous_trade_date(contextInfo)
+	recommend_date = trade_get_previous_trade_date(contextInfo)
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
-	# 判断recommendation_date是否是数据库里的最新日期
-	latest_r_date = df_all['r_date'].max()
-	if recommendation_date != latest_r_date:
-		log(f'init_load_recommendations_from_db(): Warning! recommendation_date {recommendation_date} is not the latest in database {latest_r_date}!')
-	df_filtered = df_all[df_all['r_date'] == recommendation_date]
+	# 判断recommend_date是否是数据库里的最新日期
+	latest_recommend_date = df_all['recommend_date'].max()
+	if recommend_date != latest_recommend_date:
+		log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
+	df_filtered = df_all[df_all['recommend_date'] == recommend_date]
 	for df in df_filtered.itertuples():
-		T.codes_recommendated[df.code] = {}
-		T.codes_recommendated[df.code]['name'] = df.name
-		T.codes_recommendated[df.code]['r_date'] = df.r_date
-		T.codes_recommendated[df.code]['sell_status'] = ''
-		T.codes_recommendated[df.code]['buy_status'] = ''
-	T.codes_to_sell = T.codes_recommendated.copy()
-	log(f'init_load_recommendations_from_db(): recommendation_date={recommendation_date}, T.codes_recommendated=\n{T.codes_recommendated}')
+		T.codes_recommended[df.code] = {}
+		T.codes_recommended[df.code]['name'] = df.name
+		T.codes_recommended[df.code]['recommend_date'] = df.recommend_date
+		T.codes_recommended[df.code]['sell_status'] = ''
+		T.codes_recommended[df.code]['buy_status'] = ''
+	T.codes_to_sell = T.codes_recommended.copy()
+	log(f'init_load_recommendations_from_db(): recommend_date={recommend_date}, T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
 
@@ -155,41 +156,41 @@ def on_timer(contextInfo):
 	# Check prices only
 	if current_time >= CHECK_PRICE_TIME and current_time < BUY_STOCK_TIME:
 		log(f'\non_timer(): current_time={current_time}, check price......')
-		ticks = contextInfo.get_full_tick(list(set(T.codes_recommendated.keys())))
+		ticks = contextInfo.get_full_tick(list(set(T.codes_recommended.keys())))
 		# log(f'on_timer(): ticks=\n{ticks}')
-		for code in list(set(T.codes_recommendated.keys())):
+		for code in list(set(T.codes_recommended.keys())):
 			last_price = ticks[code]['lastPrice']
-			recommendation_date = T.codes_recommendated[code]['r_date']
-			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommendation_date)
-			if to_buy and T.codes_recommendated[code]['buy_status'] == '':
-				log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommendation_date={recommendation_date}, to_buy={to_buy}')
-				T.codes_recommendated[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
+			recommend_date = T.codes_recommended[code]['recommend_date']
+			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommend_date)
+			if to_buy and T.codes_recommended[code]['buy_status'] == '':
+				log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommend_date={recommend_date}, to_buy={to_buy}')
+				T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
 
-	log(f'on_timer(): T.codes_recommendated={T.codes_recommendated}')
+	log(f'on_timer(): T.codes_recommended={T.codes_recommended}')
 	# 下单买入
 	# 计算标记为'BUY_AT_CALL_AUCTION'的股票个数
 	if current_time >= BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
-		buy_at_open_count = sum(1 for code in T.codes_recommendated if T.codes_recommendated[code].get('buy_status') == 'BUY_AT_CALL_AUCTION')
+		buy_at_open_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('buy_status') == 'BUY_AT_CALL_AUCTION')
 		if buy_at_open_count == 0:
 			log(f'on_timer(): no stocks to buy......')
 			return
 		amount_of_each_stock = (trade_get_cash(contextInfo) / buy_at_open_count - T.commission_minimum) / (1 + T.commission_rate + T.transfer_fee_rate) / 1000
-		for code in list(set(T.codes_recommendated.keys())):
-			if T.codes_recommendated[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
+		for code in list(set(T.codes_recommended.keys())):
+			if T.codes_recommended[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
 				continue
 			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
 			trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
-			T.codes_recommendated[code]['buy_status'] = 'BUY_AT_CALL_AUCTION_DONE'
+			T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION_DONE'
 			# 更新qmt数据库? 在回调里做? 待定
 	
 def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
-	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_recommendated.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
-	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommendated.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
-	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommendated.keys())[2], 100, 'test trade_buy_stock_by_volume()')
-	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommendated.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
+	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
+	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
+	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
+	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -220,10 +221,10 @@ def trade_get_previous_trade_date(contextInfo):
 		return today.strftime('%Y%m%d')
 	# 规避trading_dates不能真实反映当前日期的问题
 	if trading_dates[1] == current_date:
-		recommendation_date = trading_dates[0]
+		recommend_date = trading_dates[0]
 	else:
-		recommendation_date = trading_dates[1]
-	return recommendation_date
+		recommend_date = trading_dates[1]
+	return recommend_date
 
 def trade_get_cash(contextInfo):
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
@@ -256,33 +257,33 @@ def trade_on_handle_bar(contextInfo):
 			# 获取当前的最新价格
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = market_data_last_price[code]['lastPrice'].iloc[0]
-			recommendation_date = T.codes_to_sell[code]['r_date']
+			recommend_date = T.codes_to_sell[code]['recommend_date']
 			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
-			support_price = trade_get_support_price(contextInfo, code, recommendation_date)
+			support_price = trade_get_support_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
 			# 	pre_close = open / 1.05
-			# log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+			# log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 			# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
 			if open <= support_price and open <= pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
 				continue
 			# 低于支撑线开盘, 且开盘价高于4%, 则以开盘价卖出
 			if open <= support_price and open > pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN'
 				continue
 			# 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
 			if open > support_price and current <= support_price and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_on_handle_bar(SELL_IMMEDIATE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_IMMEDIATE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE'
 				continue
 			# 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
 			# log(f'{open > support_price} {current > support_price} {current < up_stop_price} {current_time >= CHECK_CLOSE_PRICE_TIME} {current_time < SELL_AT_CLOSE_TIME} {T.codes_to_sell[code]["sell_status"] == ""} {current_time}')
 			# log(f'{open} > {support_price} {current} > {support_price} {current} < {up_stop_price} {current_time} >= {CHECK_CLOSE_PRICE_TIME} {current_time} < {SELL_AT_CLOSE_TIME} {T.codes_to_sell[code]["sell_status"] == ""} {current_time}')
 			if open > support_price and current > support_price and current < up_stop_price and current_time >= CHECK_CLOSE_PRICE_TIME and current_time < SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == '':
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommendation_date={recommendation_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
 				continue
 	
@@ -306,34 +307,34 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE_DONE'
 			continue
 
-def trade_is_to_buy(contextInfo, code, open, recommendation_date):
-	# 使用 recommendation_date 获取收盘价
-	market_data_recommendation = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=recommendation_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-	if market_data_recommendation[code].empty:
-		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{recommendation_date}收盘价数据!')
+def trade_is_to_buy(contextInfo, code, open, recommend_date):
+	# 使用 recommend_date 获取收盘价
+	market_data_recommend = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommend_date, end_time=recommend_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+	if market_data_recommend[code].empty:
+		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{recommend_date}收盘价数据!')
 		return False
-	pre_close = market_data_recommendation[code]['close'].iloc[0]
-	support_price = trade_get_support_price(contextInfo, code, recommendation_date)
+	pre_close = market_data_recommend[code]['close'].iloc[0]
+	support_price = trade_get_support_price(contextInfo, code, recommend_date)
 	result = open >= support_price and open >= pre_close * T.BUY_THRESHOLD
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
 	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', result={result})
 	return result
 
-def trade_get_support_price(contextInfo, code='600167.SH', recommendation_date='20250923', current_date=None):
+def trade_get_support_price(contextInfo, code='600167.SH', recommend_date='20250923', current_date=None):
 	if current_date is None:
 		current_date = date.today().strftime('%Y%m%d')
-	# 判断recommendation_date早于current_date，使用日期对象比较
-	if datetime.strptime(recommendation_date, '%Y%m%d').date() >= datetime.strptime(current_date, '%Y%m%d').date():
-		log(f'trade_get_support_price(): Error! recommendation_date {recommendation_date} is not earlier than current_date {current_date}!')
+	# 判断recommend_date早于current_date，使用日期对象比较
+	if datetime.strptime(recommend_date, '%Y%m%d').date() >= datetime.strptime(current_date, '%Y%m%d').date():
+		log(f'trade_get_support_price(): Error! recommend_date {recommend_date} is not earlier than current_date {current_date}!')
 		return None
-	# 获取从recommendation_date到current_date的收盘价数据
-	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommendation_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+	# 获取从recommend_date到current_date的收盘价数据
+	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommend_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 	# 计算交易日天数，不包括停牌日期
 	closes = market_data[code]['close']
 	trading_days_count = closes.dropna().shape[0]
 	recommendation_close = closes.iloc[0]
 	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
-	# log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommendation_date={recommendation_date}, current_date={current_date}')
+	# log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommend_date={recommend_date}, current_date={current_date}')
 	return support_price
 
 def trade_query_info(contextInfo):
@@ -602,23 +603,24 @@ def db_init():
 	CREATE TABLE IF NOT EXISTS stock_status (
 		code TEXT PRIMARY KEY,
 		name TEXT,
-		r_date TEXT,
-		b_date TEXT,
-		b_price REAL,
-		s_date TEXT,
-		s_price REAL
+		recommend_date TEXT,
+		lateral_high_date TEXT,
+		buy_date TEXT,
+		buy_price REAL,
+		sell_date TEXT,
+		sell_price REAL
 	)
 	''')
 	conn.commit()
 	conn.close()
 
-def db_save_stock_status(code, name, r_date, b_date, b_price, s_date, s_price):
+def db_save_stock_status(code, name, recommend_date, buy_date, buy_price, sell_date, sell_price):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
 	cursor.execute('''
-	INSERT OR REPLACE INTO stock_status (code, name, r_date, b_date, b_price, s_date, s_price)
+	INSERT OR REPLACE INTO stock_status (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price)
 	VALUES (?, ?, ?, ?, ?, ?, ?)
-	''', (code, name, r_date, b_date, b_price, s_date, s_price))
+	''', (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price))
 	conn.commit()
 	conn.close()
 
@@ -628,10 +630,10 @@ def db_load_all():
 	conn.close()
 	return df
 
-def db_load_stock_status(r_date):
+def db_load_stock_status(recommend_date):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('SELECT code, name, r_date, b_date, b_price, s_date, s_price FROM stock_status WHERE r_date = ?', (r_date,))
+	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price FROM stock_status WHERE recommend_date = ?', (recommend_date,))
 	rows = cursor.fetchall()
 	conn.close()
 	stock_status_list = []
@@ -639,29 +641,29 @@ def db_load_stock_status(r_date):
 		stock_status_list.append({
 			'code': row[0],
 			'name': row[1],
-			'r_date': row[2],
-			'b_date': row[3],
-			'b_price': row[4],
-			's_date': row[5],
-			's_price': row[6]
+			'recommend_date': row[2],
+			'buy_date': row[3],
+			'buy_price': row[4],
+			'sell_date': row[5],
+			'sell_price': row[6]
 		})
 	return stock_status_list
 
 def db_load_stock_status(code):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('SELECT code, name, r_date, b_date, b_price, s_date, s_price FROM stock_status WHERE code = ?', (code,))
+	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price FROM stock_status WHERE code = ?', (code,))
 	row = cursor.fetchone()
 	conn.close()
 	if row:
 		return {
 			'code': row[0],
 			'name': row[1],
-			'r_date': row[2],
-			'b_date': row[3],
-			'b_price': row[4],
-			's_date': row[5],
-			's_price': row[6]
+			'recommend_date': row[2],
+			'buy_date': row[3],
+			'buy_price': row[4],
+			'sell_date': row[5],
+			'sell_price': row[6]
 		}
 	else:
 		return None
