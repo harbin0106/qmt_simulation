@@ -43,7 +43,15 @@ def init_load_codes_in_position(contextInfo):
 	buy_dates = {}
 	for deal in deals:
 		code = f"{deal.m_strInstrumentID}.{deal.m_strExchangeID}"
-		print(f'deal = {deal}')
+		# 打印所有成员变量的内容
+		# log('init_load_codes_in_position(): All attributes of deal:')
+		# for attr in dir(deal):
+		# 	if not attr.startswith('_'):
+		# 		try:
+		# 			value = getattr(deal, attr)
+		# 			log(f'  {attr}: {value}')
+		# 		except:
+		# 			log(f'  {attr}: <无法获取>')
 		if code in codes and deal.m_nDirection == 48:  # 48 表示买入
 			trade_date = deal.m_strTradeDate
 			if code not in buy_dates or trade_date < buy_dates[code]:
@@ -52,6 +60,15 @@ def init_load_codes_in_position(contextInfo):
 	# 构建 T.codes_in_position
 	for dt in positions:
 		code = f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}"
+		# 打印所有成员变量的内容
+		# log('init_load_codes_in_position(): All attributes of dt:')
+		# for attr in dir(dt):
+		# 	if not attr.startswith('_'):
+		# 		try:
+		# 			value = getattr(dt, attr)
+		# 			log(f'  {attr}: {value}')
+		# 		except:
+		# 			log(f'  {attr}: <无法获取>')
 		if code not in T.codes_in_position:
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
@@ -89,11 +106,17 @@ def init_load_recommendations_from_db(contextInfo):
 	latest_recommend_date = df_all['recommend_date'].max()
 	if recommend_date != latest_recommend_date:
 		log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
-	df_filtered = df_all[df_all['recommend_date'] == recommend_date]
+	df_filtered = df_all[df_all['effective'] == 'Y']
 	for df in df_filtered.itertuples():
 		T.codes_recommended[df.code] = {}
 		T.codes_recommended[df.code]['name'] = df.name
 		T.codes_recommended[df.code]['recommend_date'] = df.recommend_date
+		T.codes_recommended[df.code]['lateral_high_date'] = df.lateral_high_date
+		T.codes_recommended[df.code]['buy_date'] = df.buy_date
+		T.codes_recommended[df.code]['buy_price'] = df.buy_price
+		T.codes_recommended[df.code]['sell_date'] = df.sell_date
+		T.codes_recommended[df.code]['sell_price'] = df.sell_price
+		T.codes_recommended[df.code]['effective'] = df.effective
 		T.codes_recommended[df.code]['sell_status'] = ''
 		T.codes_recommended[df.code]['buy_status'] = ''
 	T.codes_to_sell = T.codes_recommended.copy()
@@ -608,19 +631,20 @@ def db_init():
 		buy_date TEXT,
 		buy_price REAL,
 		sell_date TEXT,
-		sell_price REAL
+		sell_price REAL,
+		effective TEXT
 	)
 	''')
 	conn.commit()
 	conn.close()
 
-def db_save_stock_status(code, name, recommend_date, buy_date, buy_price, sell_date, sell_price):
+def db_save_stock_status(code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective=None):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
 	cursor.execute('''
-	INSERT OR REPLACE INTO stock_status (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price)
-	VALUES (?, ?, ?, ?, ?, ?, ?)
-	''', (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price))
+	INSERT OR REPLACE INTO stock_status (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	''', (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective))
 	conn.commit()
 	conn.close()
 
@@ -633,7 +657,7 @@ def db_load_all():
 def db_load_stock_status(recommend_date):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price FROM stock_status WHERE recommend_date = ?', (recommend_date,))
+	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective FROM stock_status WHERE recommend_date = ?', (recommend_date,))
 	rows = cursor.fetchall()
 	conn.close()
 	stock_status_list = []
@@ -645,14 +669,15 @@ def db_load_stock_status(recommend_date):
 			'buy_date': row[3],
 			'buy_price': row[4],
 			'sell_date': row[5],
-			'sell_price': row[6]
+			'sell_price': row[6],
+			'effective': row[7]
 		})
 	return stock_status_list
 
 def db_load_stock_status(code):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price FROM stock_status WHERE code = ?', (code,))
+	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective FROM stock_status WHERE code = ?', (code,))
 	row = cursor.fetchone()
 	conn.close()
 	if row:
@@ -663,7 +688,8 @@ def db_load_stock_status(code):
 			'buy_date': row[3],
 			'buy_price': row[4],
 			'sell_date': row[5],
-			'sell_price': row[6]
+			'sell_price': row[6],
+			'effective': row[7]
 		}
 	else:
 		return None
