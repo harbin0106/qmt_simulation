@@ -15,6 +15,7 @@ def init(contextInfo):
 	T.download_mode = False
 	if T.download_mode:
 		return
+	init_clear_log_file(contextInfo)
 	log('\n' + '=' * 40 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 40)
 	init_trade_parameters(contextInfo)
 	db_init()
@@ -117,10 +118,10 @@ def init_load_recommendations_from_db(contextInfo):
 		T.codes_recommended[df.code]['sell_date'] = df.sell_date
 		T.codes_recommended[df.code]['sell_price'] = df.sell_price
 		T.codes_recommended[df.code]['effective'] = df.effective
-		T.codes_recommended[df.code]['sell_status'] = ''
-		T.codes_recommended[df.code]['buy_status'] = ''
+		T.codes_recommended[df.code]['sell_status'] = None
+		T.codes_recommended[df.code]['buy_status'] = None
 	T.codes_to_sell = T.codes_recommended.copy()
-	log(f'init_load_recommendations_from_db(): recommend_date={recommend_date}, T.codes_recommended=\n{T.codes_recommended}')
+	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
 
@@ -162,6 +163,14 @@ def init_open_log_file(contextInfo):
 	path = 'C:/a/trade/量化/中信证券/code/'
 	file_name = 'QMT ' + current_date + ' log.txt'
 	os.startfile(path + file_name)
+
+def init_clear_log_file(contextInfo):
+	# 清除日志文件内容
+	current_date = date.today().strftime('%Y%m%d')
+	path = 'C:/a/trade/量化/中信证券/code/'
+	file_name = 'QMT ' + current_date + ' log.txt'
+	with open(path + file_name, 'w', encoding='utf-8') as f:
+		pass  # 清空文件内容
 
 def on_timer(contextInfo):
 	if not hasattr(on_timer, 'stop_timer'):
@@ -273,10 +282,11 @@ def trade_on_handle_bar(contextInfo):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
 			open = market_data_open[code]['open'].iloc[0]
-			# 获取昨日收盘价
-			market_data_pre_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
+			# 获取昨日收盘价和最低价
+			market_data_pre = contextInfo.get_market_data_ex(['close', 'low'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
 			# iloc[0]是昨天，iloc[1]是今天
-			pre_close = market_data_pre_close[code]['close'].iloc[0]
+			pre_close = market_data_pre[code]['close'].iloc[0]
+			pre_low = market_data_pre[code]['low'].iloc[0]
 			# 获取当前的最新价格
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = market_data_last_price[code]['lastPrice'].iloc[0]
@@ -288,8 +298,12 @@ def trade_on_handle_bar(contextInfo):
 				log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
 				return False
 			lateral_high = market_data_lateral_high[code]['high'].iloc[0]
-			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
-			return
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
+			if T.codes_recommended[code]['buy_date'] is None:
+				log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)} has no buy_date!')
+				if current >= lateral_high and pre_low <= lateral_high:
+					log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
+			continue
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
@@ -386,9 +400,9 @@ def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
 		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
 		return False
 	lateral_high = market_data_lateral_high[code]['high'].iloc[0]
-	# result = current >= support_price and current >= pre_close * T.BUY_THRESHOLD
-	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
-	# log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, current={current:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', result={result})
+	# 判断条件：当前价格高于推荐日的最高价
+	result = current >= lateral_high
+	# log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, current={current:.2f}, lateral_high={lateral_high:.2f}, result={result}')
 	return result
 
 def trade_get_support_price(contextInfo, code='600167.SH', recommend_date='20250923', current_date=None):
