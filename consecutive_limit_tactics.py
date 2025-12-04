@@ -298,12 +298,22 @@ def trade_on_handle_bar(contextInfo):
 				log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
 				return False
 			lateral_high = market_data_lateral_high[code]['high'].iloc[0]
-			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
-			if T.codes_recommended[code]['buy_date'] is None:
-				log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)} has no buy_date!')
-				if current >= lateral_high and pre_low <= lateral_high:
-					log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
-			continue
+			# 获取120日的成交额
+			market_data_amount = contextInfo.get_market_data_ex(['amount'], [code], period='1d', count=120, dividend_type='front', fill_data=False, subscribe=True)
+			amounts = market_data_amount[code]['amount']
+			average_amount_120 = amounts.mean()
+
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}')
+			# 买入: 突破历史高点
+			if T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
+				T.codes_recommended[code]['buy_date'] = current_date
+				T.codes_recommended[code]['buy_status'] = 'BUY_AT_BREAKOUT'
+				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
+				continue
+			# 买入: 缩量买入
+			if T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
+				pass
+			return
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
