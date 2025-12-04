@@ -299,11 +299,18 @@ def trade_on_handle_bar(contextInfo):
 				return False
 			lateral_high = market_data_lateral_high[code]['high'].iloc[0]
 			# 获取120日的成交额
-			market_data_amount = contextInfo.get_market_data_ex(['amount'], [code], period='1d', count=120, dividend_type='front', fill_data=False, subscribe=True)
-			amounts = market_data_amount[code]['amount']
+			market_data = contextInfo.get_market_data_ex(['amount', 'close'], [code], period='1d', count=120, dividend_type='front', fill_data=False, subscribe=True)
+			amounts = market_data[code]['amount']
+			closes = market_data[code]['close']
 			average_amount_120 = amounts.mean()
-
-			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}')
+			# 计算120日的rates
+			rates = closes.pct_change().dropna()
+			# log(f'len(closes)={len(closes)}, len(rates)={len(rates)}')
+			# 计算5日均线的数值
+			closes_ma5 = closes.rolling(window=5).mean()
+			closes_ma5_derivative = closes_ma5.diff(1).dropna()
+			closes_ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts.iloc[-1]={amounts.iloc[-1]:.0f}, rates.iloc[-1]={rates.iloc[-1]:.4f}, rates.iloc[-2]={rates.iloc[-2]:.4f}, rates.iloc[-3]={rates.iloc[-3]:.4f}, closes_ma5_derivative_normalized.iloc[-1]={closes_ma5_derivative_normalized.iloc[-1]:.4f}')
 			# 买入: 突破历史高点
 			if T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
 				T.codes_recommended[code]['buy_date'] = current_date
@@ -311,8 +318,10 @@ def trade_on_handle_bar(contextInfo):
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
 				continue
 			# 买入: 缩量买入
-			if T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
-				pass
+			amount_result1 = amounts.iloc[-1] < 1.5 * average_amount_120 and abs(rates.iloc[-1]) <= 0.03 and abs(rates.iloc[-2]) <= 0.03 and abs(rates.iloc[-3]) <= 0.03 and amounts.iloc[-1] < amounts.iloc[-2] < amounts.iloc[-3] 
+			amount_result2 = amounts.iloc[-1] < average_amount_120 and rates.iloc[-1] >= -0.03
+			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and (amount_result1 or amount_result2) and closes_ma5_derivative_normalized.iloc[-1] > -0.02:
+				log(f'{current_time} trade_on_handle_bar(BUY_AT_VOLUME): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts.iloc[-1]={amounts.iloc[-1]:.0f}')
 			return
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
