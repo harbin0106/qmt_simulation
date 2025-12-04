@@ -103,9 +103,9 @@ def init_load_recommendations_from_db(contextInfo):
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
 	# 判断recommend_date是否是数据库里的最新日期
-	latest_recommend_date = df_all['recommend_date'].max()
-	if recommend_date != latest_recommend_date:
-		log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
+	# latest_recommend_date = df_all['recommend_date'].max()
+	# if recommend_date != latest_recommend_date:
+	# 	log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
 	df_filtered = df_all[df_all['effective'] == 'Y']
 	for df in df_filtered.itertuples():
 		T.codes_recommended[df.code] = {}
@@ -264,11 +264,60 @@ def trade_on_handle_bar(contextInfo):
 		return
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	SELL_AT_CLOSE_TIME = '14:56:40'
-	df = pd.DataFrame.from_dict(T.codes_to_sell, orient='index')
-	# log(f'\ntrade_on_handle_bar(): T.codes_to_sell=\n{df.to_string()}')
+	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
+	log(f'\ntrade_on_handle_bar(): T.codes_recommended=\n{df.to_string()}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if current_time < SELL_AT_CLOSE_TIME:
+		for code in list(set(T.codes_recommended.keys())):
+			# 获取今日开盘价
+			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
+			open = market_data_open[code]['open'].iloc[0]
+			# 获取昨日收盘价
+			market_data_pre_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
+			# iloc[0]是昨天，iloc[1]是今天
+			pre_close = market_data_pre_close[code]['close'].iloc[0]
+			# 获取当前的最新价格
+			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+			current = market_data_last_price[code]['lastPrice'].iloc[0]
+			lateral_high_date = T.codes_recommended[code]['lateral_high_date']
+			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
+			# 使用 lateral_high_date 获取lateral_high价格
+			market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+			if market_data_lateral_high[code].empty:
+				log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
+				return False
+			lateral_high = market_data_lateral_high[code]['high'].iloc[0]
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
+			return
+			support_price = trade_get_support_price(contextInfo, code, recommend_date)
+			# if code == '002255.SZ':
+			# 	open = support_price - 0.01
+			# 	pre_close = open / 1.05
+			# log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+			# 低于支撑线开盘, 且开盘价低于4%, 以收盘价卖出
+			if open <= support_price and open <= pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
+				continue
+			# 低于支撑线开盘, 且开盘价高于4%, 则以开盘价卖出
+			if open <= support_price and open > pre_close * 1.04 and T.codes_to_sell[code]['sell_status'] == '':
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN'
+				continue
+			# 高于支撑线开盘, 股价下行穿过支撑线, 则以支撑线价格卖出
+			if open > support_price and current <= support_price and T.codes_to_sell[code]['sell_status'] == '':
+				log(f'{current_time} trade_on_handle_bar(SELL_IMMEDIATE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE'
+				continue
+			# 高于支撑线开盘, 且股价没有下行穿过支撑线, 但是收盘不涨停, 以收盘价卖出
+			# log(f'{open > support_price} {current > support_price} {current < up_stop_price} {current_time >= CHECK_CLOSE_PRICE_TIME} {current_time < SELL_AT_CLOSE_TIME} {T.codes_to_sell[code]["sell_status"] == ""} {current_time}')
+			# log(f'{open} > {support_price} {current} > {support_price} {current} < {up_stop_price} {current_time} >= {CHECK_CLOSE_PRICE_TIME} {current_time} < {SELL_AT_CLOSE_TIME} {T.codes_to_sell[code]["sell_status"] == ""} {current_time}')
+			if open > support_price and current > support_price and current < up_stop_price and current_time >= CHECK_CLOSE_PRICE_TIME and current_time < SELL_AT_CLOSE_TIME and T.codes_to_sell[code]['sell_status'] == '':
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, open={open:.2f}, current={current:.2f}, recommend_date={recommend_date}, up_stop_price={up_stop_price:.2f}, support_price={support_price:.2f}')
+				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE'
+				continue
+		return
 		for code in list(set(T.codes_to_sell.keys())):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
@@ -330,17 +379,16 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE_DONE'
 			continue
 
-def trade_is_to_buy(contextInfo, code, open, recommend_date):
-	# 使用 recommend_date 获取收盘价
-	market_data_recommend = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommend_date, end_time=recommend_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-	if market_data_recommend[code].empty:
-		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{recommend_date}收盘价数据!')
+def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
+	# 使用 lateral_high_date 获取lateral_high价格
+	market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+	if market_data_lateral_high[code].empty:
+		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
 		return False
-	pre_close = market_data_recommend[code]['close'].iloc[0]
-	support_price = trade_get_support_price(contextInfo, code, recommend_date)
-	result = open >= support_price and open >= pre_close * T.BUY_THRESHOLD
+	lateral_high = market_data_lateral_high[code]['high'].iloc[0]
+	# result = current >= support_price and current >= pre_close * T.BUY_THRESHOLD
 	# 判断条件：支撑线上涨突破，且开盘价高于前一日收盘价的BUY_THRESHOLD
-	log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, open={open:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', result={result})
+	# log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, current={current:.2f}, pre_close={pre_close:.2f}, support_price={support_price:.2f}, pre_close * T.BUY_THRESHOLD={pre_close * T.BUY_THRESHOLD:.2f}', result={result})
 	return result
 
 def trade_get_support_price(contextInfo, code='600167.SH', recommend_date='20250923', current_date=None):
