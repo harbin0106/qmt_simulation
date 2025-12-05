@@ -156,6 +156,7 @@ def init_trade_parameters(contextInfo):
 	# 算法参数
 	T.SLOPE = np.log(1.1098)
 	T.BUY_THRESHOLD = 1.096
+	T.TARGET_DATE = '20251201'
 
 def init_open_log_file(contextInfo):
 	# 打开日志文件
@@ -233,8 +234,11 @@ def handlebar(contextInfo):
 	if contextInfo.period != 'tick':
 		log(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
 		return
+	# Filter by target date
+	if T.TARGET_DATE != '' and T.TARGET_DATE != timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d'):
+		return	
 	# Skip history bars ####################################
-	if not contextInfo.is_last_bar():
+	if not contextInfo.is_last_bar() and T.TARGET_DATE == '':
 		# log(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
 	trade_on_handle_bar(contextInfo)
@@ -266,7 +270,10 @@ def trade_get_cash(contextInfo):
 	return float(account[0].m_dAvailable)	
 
 def trade_on_handle_bar(contextInfo):
-	current_date = date.today().strftime('%Y%m%d')
+	if T.TARGET_DATE != '':
+		current_date = T.TARGET_DATE
+	else:
+		current_date = date.today().strftime('%Y%m%d')
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if current_date != bar_date:
 		log(f'trade_on_handle_bar(): Error! current_date != bar_date! {current_date}, {bar_date}')
@@ -321,6 +328,8 @@ def trade_on_handle_bar(contextInfo):
 			amount_result1 = amounts.iloc[-1] < 1.5 * average_amount_120 and abs(rates.iloc[-1]) <= 0.03 and abs(rates.iloc[-2]) <= 0.03 and abs(rates.iloc[-3]) <= 0.03 and amounts.iloc[-1] < amounts.iloc[-2] < amounts.iloc[-3] 
 			amount_result2 = amounts.iloc[-1] < average_amount_120 and rates.iloc[-1] >= -0.03
 			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and (amount_result1 or amount_result2) and closes_ma5_derivative_normalized.iloc[-1] > -0.02:
+				T.codes_recommended[code]['buy_date'] = current_date
+				T.codes_recommended[code]['buy_status'] = 'BUY_AT_VOLUME'
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_VOLUME): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts.iloc[-1]={amounts.iloc[-1]:.0f}')
 			return
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
