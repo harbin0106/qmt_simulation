@@ -278,14 +278,15 @@ def trade_on_handle_bar(contextInfo):
 	if current_date != bar_date:
 		log(f'trade_on_handle_bar(): Error! current_date != bar_date! {current_date}, {bar_date}')
 		return
+	MARKET_OPEN_TIME = '09:30:00'
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	SELL_AT_CLOSE_TIME = '14:56:40'
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
-	log(f'\ntrade_on_handle_bar(): T.codes_recommended=\n{df.to_string()}')
+	# log(f'\ntrade_on_handle_bar(): T.codes_recommended=\n{df.to_string()}')
 	# log(f'bar_date={bar_date}, current_date={current_date}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	if current_time < SELL_AT_CLOSE_TIME:
+	if MARKET_OPEN_TIME <= current_time <= SELL_AT_CLOSE_TIME:
 		for code in list(set(T.codes_recommended.keys())):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
@@ -296,8 +297,14 @@ def trade_on_handle_bar(contextInfo):
 			pre_close = market_data_pre[code]['close'].iloc[0]
 			pre_low = market_data_pre[code]['low'].iloc[0]
 			# 获取当前的最新价格
-			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-			current = market_data_last_price[code]['lastPrice'].iloc[0]
+			if T.TARGET_DATE != '':
+				bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
+				market_data_last_price = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+				# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
+				current = market_data_last_price[code]['high'].iloc[0]
+			else:
+				market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+				current = market_data_last_price[code]['lastPrice'].iloc[0]
 			lateral_high_date = T.codes_recommended[code]['lateral_high_date']
 			# up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 			up_stop_price = 0
