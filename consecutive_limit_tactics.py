@@ -282,31 +282,33 @@ def trade_on_handle_bar(contextInfo):
 	SELL_AT_CLOSE_TIME = '14:56:40'
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
 	log(f'\ntrade_on_handle_bar(): T.codes_recommended=\n{df.to_string()}')
+	# log(f'bar_date={bar_date}, current_date={current_date}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if current_time < SELL_AT_CLOSE_TIME:
 		for code in list(set(T.codes_recommended.keys())):
 			# 获取今日开盘价
-			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			open = market_data_open[code]['open'].iloc[0]
 			# 获取昨日收盘价和最低价
-			market_data_pre = contextInfo.get_market_data_ex(['close', 'low'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_pre = contextInfo.get_market_data_ex(['close', 'low'], [code], period='1d', end_time=current_date, count=2, dividend_type='front', fill_data=False, subscribe=True)
 			# iloc[0]是昨天，iloc[1]是今天
 			pre_close = market_data_pre[code]['close'].iloc[0]
 			pre_low = market_data_pre[code]['low'].iloc[0]
 			# 获取当前的最新价格
-			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = market_data_last_price[code]['lastPrice'].iloc[0]
 			lateral_high_date = T.codes_recommended[code]['lateral_high_date']
-			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
-			# 使用 lateral_high_date 获取lateral_high价格
+			# up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
+			up_stop_price = 0
+            # 使用 lateral_high_date 获取lateral_high价格
 			market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			if market_data_lateral_high[code].empty:
 				log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
 				return False
 			lateral_high = market_data_lateral_high[code]['high'].iloc[0]
 			# 获取120日的成交额
-			market_data = contextInfo.get_market_data_ex(['amount', 'close'], [code], period='1d', count=120, dividend_type='front', fill_data=False, subscribe=True)
+			market_data = contextInfo.get_market_data_ex(['amount', 'close'], [code], period='1d', end_time=current_date, count=120, dividend_type='front', fill_data=False, subscribe=True)
 			amounts = market_data[code]['amount']
 			closes = market_data[code]['close']
 			average_amount_120 = amounts.mean()
