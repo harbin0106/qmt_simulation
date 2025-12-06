@@ -290,21 +290,24 @@ def trade_on_handle_bar(contextInfo):
 		for code in list(set(T.codes_recommended.keys())):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-			open = market_data_open[code]['open'].iloc[0]
+			open = market_data_open[code]['open'][0]
 			# 获取昨日收盘价和最低价
 			market_data_pre = contextInfo.get_market_data_ex(['close', 'low'], [code], period='1d', end_time=current_date, count=2, dividend_type='front', fill_data=False, subscribe=True)
-			# iloc[0]是昨天，iloc[1]是今天
-			pre_close = market_data_pre[code]['close'].iloc[0]
-			pre_low = market_data_pre[code]['low'].iloc[0]
+			# [0]是昨天，[1]是今天
+			pre_close = market_data_pre[code]['close'][0]
+			pre_low = market_data_pre[code]['low'][0]
 			# 获取当前的最新价格
 			if T.TARGET_DATE != '':
 				bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
 				market_data_last_price = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 				# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
-				current = market_data_last_price[code]['high'].iloc[0]
+				if market_data_last_price[code].empty:
+					log(f'trade_on_handle_bar(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的{bar_time}分钟线数据!')
+					return
+				current = market_data_last_price[code]['high'][0]
 			else:
 				market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-				current = market_data_last_price[code]['lastPrice'].iloc[0]
+				current = market_data_last_price[code]['lastPrice'][0]
 			lateral_high_date = T.codes_recommended[code]['lateral_high_date']
 			# up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 			up_stop_price = 0
@@ -313,33 +316,36 @@ def trade_on_handle_bar(contextInfo):
 			if market_data_lateral_high[code].empty:
 				log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
 				return False
-			lateral_high = market_data_lateral_high[code]['high'].iloc[0]
+			lateral_high = market_data_lateral_high[code]['high'][0]
 			# 获取120日的成交额
 			market_data = contextInfo.get_market_data_ex(['amount', 'close'], [code], period='1d', end_time=current_date, count=120, dividend_type='front', fill_data=False, subscribe=True)
 			amounts = market_data[code]['amount']
 			closes = market_data[code]['close']
 			average_amount_120 = amounts.mean()
+			# 计算成交量相对量比
+			rolling_max = pd.Series(amounts).rolling(window=20).max().values
+			rolling_min = pd.Series(amounts).rolling(window=20).min().values
+			amount_ratios = (amounts - rolling_min) / (rolling_max - rolling_min)
+			amount_ratios = np.nan_to_num(amount_ratios, nan=0)
 			# 计算120日的rates
 			rates = closes.pct_change().dropna()
 			# log(f'len(closes)={len(closes)}, len(rates)={len(rates)}')
 			# 计算5日均线的数值
 			closes_ma5 = closes.rolling(window=5).mean()
 			closes_ma5_derivative = closes_ma5.diff(1).dropna()
-			closes_ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
-			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts.iloc[-1]={amounts.iloc[-1]:.0f}, rates.iloc[-1]={rates.iloc[-1]:.4f}, rates.iloc[-2]={rates.iloc[-2]:.4f}, rates.iloc[-3]={rates.iloc[-3]:.4f}, closes_ma5_derivative_normalized.iloc[-1]={closes_ma5_derivative_normalized.iloc[-1]:.4f}')
-			# 买入: 突破历史高点
+			ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.4f}, rates={rates[-2]:.4f}, rates[-3]={rates[-3]:.4f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}')
+			# 买入: 只要超过lateral_high就买入
 			if T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
 				T.codes_recommended[code]['buy_date'] = current_date
 				T.codes_recommended[code]['buy_status'] = 'BUY_AT_BREAKOUT'
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
 				continue
-			# 买入: 缩量买入
-			amount_result1 = amounts.iloc[-1] < 1.5 * average_amount_120 and abs(rates.iloc[-1]) <= 0.03 and abs(rates.iloc[-2]) <= 0.03 and abs(rates.iloc[-3]) <= 0.03 and amounts.iloc[-1] < amounts.iloc[-2] < amounts.iloc[-3] 
-			amount_result2 = amounts.iloc[-1] < average_amount_120 and rates.iloc[-1] >= -0.03
-			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and (amount_result1 or amount_result2) and closes_ma5_derivative_normalized.iloc[-1] > -0.02:
+			# 买入: 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
+			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and amount_ratios[-1] < 0.2 and  current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
 				T.codes_recommended[code]['buy_date'] = current_date
 				T.codes_recommended[code]['buy_status'] = 'BUY_AT_VOLUME'
-				log(f'{current_time} trade_on_handle_bar(BUY_AT_VOLUME): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts.iloc[-1]={amounts.iloc[-1]:.0f}')
+				log(f'{current_time} trade_on_handle_bar(BUY_AT_VOLUME): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}')
 			return
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
@@ -372,14 +378,14 @@ def trade_on_handle_bar(contextInfo):
 		for code in list(set(T.codes_to_sell.keys())):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', count=1, dividend_type='front', fill_data=False, subscribe=True)
-			open = market_data_open[code]['open'].iloc[0]
+			open = market_data_open[code]['open'][0]
 			# 获取昨日收盘价
 			market_data_pre_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', count=2, dividend_type='front', fill_data=False, subscribe=True)
-			# iloc[0]是昨天，iloc[1]是今天
-			pre_close = market_data_pre_close[code]['close'].iloc[0]
+			# [0]是昨天，[1]是今天
+			pre_close = market_data_pre_close[code]['close'][0]
 			# 获取当前的最新价格
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
-			current = market_data_last_price[code]['lastPrice'].iloc[0]
+			current = market_data_last_price[code]['lastPrice'][0]
 			recommend_date = T.codes_to_sell[code]['recommend_date']
 			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
@@ -436,7 +442,7 @@ def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
 	if market_data_lateral_high[code].empty:
 		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
 		return False
-	lateral_high = market_data_lateral_high[code]['high'].iloc[0]
+	lateral_high = market_data_lateral_high[code]['high'][0]
 	# 判断条件：当前价格高于推荐日的最高价
 	result = current >= lateral_high
 	# log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, current={current:.2f}, lateral_high={lateral_high:.2f}, result={result}')
@@ -454,7 +460,7 @@ def trade_get_support_price(contextInfo, code='600167.SH', recommend_date='20250
 	# 计算交易日天数，不包括停牌日期
 	closes = market_data[code]['close']
 	trading_days_count = closes.dropna().shape[0]
-	recommendation_close = closes.iloc[0]
+	recommendation_close = closes[0]
 	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
 	# log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommend_date={recommend_date}, current_date={current_date}')
 	return support_price
@@ -596,7 +602,7 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 	if code not in market_data or market_data[code].empty:
 		log(f'trade_buy_stock_by_amount(): Error! 无法获取{code} {get_stock_name(contextInfo, code)}的最新股价!')
 		return
-	last_price = market_data[code]['lastPrice'].iloc[0]
+	last_price = market_data[code]['lastPrice'][0]
 	log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
 	# 计算买入100股的成本
 	min_volume = 100
@@ -631,7 +637,7 @@ def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
 	if code not in market_data or market_data[code].empty:
 		log(f'trade_buy_stock_by_volume(): Error! 无法获取{code} {get_stock_name(contextInfo, code)}的最新股价!')
 		return
-	last_price = market_data[code]['lastPrice'].iloc[0]
+	last_price = market_data[code]['lastPrice'][0]
 	log(f'trade_buy_stock_by_volume(): 当前最新股价: {last_price:.2f}')
 
 	# 计算成交金额
@@ -839,8 +845,8 @@ def data_save_stock_data(df):
 		cursor = conn.cursor()
 
 		# 提取股票信息
-		code = df['code'].iloc[0]
-		name = df['name'].iloc[0]
+		code = df['code'][0]
+		name = df['name'][0]
 
 		# 插入stocks表（如果不存在）
 		cursor.execute('INSERT OR IGNORE INTO stocks (code, name) VALUES (?, ?)', (code, name))
