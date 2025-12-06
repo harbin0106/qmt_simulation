@@ -334,7 +334,7 @@ def trade_on_handle_bar(contextInfo):
 			closes_ma5 = closes.rolling(window=5).mean()
 			closes_ma5_derivative = closes_ma5.diff(1).dropna()
 			ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
-			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.4f}, rates={rates[-2]:.4f}, rates[-3]={rates[-3]:.4f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}')
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.4f}, rates[-2]={rates[-2]:.4f}, rates[-3]={rates[-3]:.4f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}')
 			# 买入: 只要超过lateral_high就买入
 			if T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
 				T.codes_recommended[code]['buy_date'] = current_date
