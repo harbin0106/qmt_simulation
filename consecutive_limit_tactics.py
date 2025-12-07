@@ -156,7 +156,7 @@ def init_trade_parameters(contextInfo):
 	# 算法参数
 	T.SLOPE = np.log(1.1098)
 	T.BUY_THRESHOLD = 1.096
-	T.TARGET_DATE = '20251201'
+	T.TARGET_DATE = '20251114'
 
 def init_open_log_file(contextInfo):
 	# 打开日志文件
@@ -342,7 +342,7 @@ def trade_on_handle_bar(contextInfo):
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
 				continue
 			# 买入: 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
-			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and amount_ratios[-1] < 0.2 and  current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
+			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_recommended[code]['buy_date'] is None and current > lateral_high and amount_ratios[-2] < 0.2 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
 				T.codes_recommended[code]['buy_date'] = current_date
 				T.codes_recommended[code]['buy_status'] = 'BUY_AT_VOLUME'
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_VOLUME): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}')
