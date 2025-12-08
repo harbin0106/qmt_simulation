@@ -155,7 +155,6 @@ def init_trade_parameters(contextInfo):
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
 	T.SLOPE = np.log(1.09)
-	T.BUY_THRESHOLD = 1.096
 	T.TARGET_DATE = '20251205'
 
 def init_open_log_file(contextInfo):
@@ -224,7 +223,6 @@ def after_init(contextInfo):
 	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
 	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
 	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
-	trade_get_support_upper_price(contextInfo)
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -281,13 +279,13 @@ def trade_on_handle_bar(contextInfo):
 		return
 	MARKET_OPEN_TIME = '09:30:00'
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
-	SELL_AT_CLOSE_TIME = '14:56:40'
+	TRANSACTION_CLOSE_TIME = '14:56:40'
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
 	# log(f'\ntrade_on_handle_bar(): T.codes_recommended=\n{df.to_string()}')
 	# log(f'bar_date={bar_date}, current_date={current_date}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	if MARKET_OPEN_TIME <= current_time <= SELL_AT_CLOSE_TIME:
+	if MARKET_OPEN_TIME <= current_time <= TRANSACTION_CLOSE_TIME:
 		for code in list(set(T.codes_recommended.keys())):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
@@ -376,20 +374,37 @@ def trade_on_handle_bar(contextInfo):
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
 			continue
 	# 卖出股票
-	log(f'trade_on_handle_bar()1: {T.codes_to_sell}')
-	for code in list(set(T.codes_to_sell.keys())):
-		if  T.codes_to_sell[code]['sell_status'] is None:
-			continue
-		if current_time >= SELL_AT_CLOSE_TIME and (T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_LATERAL_HIGH' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
-			trade_sell_stock(contextInfo, code, T.codes_to_sell[code]['sell_status'])
-			T.codes_to_sell[code]['sell_status'] = T.codes_to_sell[code]['sell_status'] + '_DONE'
-			continue
-		if T.codes_to_sell[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_LATERAL_HIGH' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
-			trade_sell_stock(contextInfo, code, T.codes_to_sell[code]['sell_status'])
-			T.codes_to_sell[code]['sell_status'] = T.codes_to_sell[code]['sell_status'] + '_DONE'
-			continue
+	sell_count = sum(1 for code in T.codes_to_sell if T.codes_to_sell[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_LATERAL_HIGH', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_LATERAL_HIGH', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CURRENT_ABOVE_UPPER'])
+	if sell_count != 0:
+		log(f'trade_on_handle_bar(): sell_count={sell_count}, T.codes_to_sell=\n{T.codes_to_sell}')
+		for code in list(set(T.codes_to_sell.keys())):
+			if  T.codes_to_sell[code]['sell_status'] is None:
+				continue
+			if current_time >= TRANSACTION_CLOSE_TIME and (T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_LATERAL_HIGH' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
+				trade_sell_stock(contextInfo, code, T.codes_to_sell[code]['sell_status'])
+				T.codes_to_sell[code]['sell_status'] = T.codes_to_sell[code]['sell_status'] + '_DONE'
+				continue
+			if T.codes_to_sell[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_LATERAL_HIGH' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
+				trade_sell_stock(contextInfo, code, T.codes_to_sell[code]['sell_status'])
+				T.codes_to_sell[code]['sell_status'] = T.codes_to_sell[code]['sell_status'] + '_DONE'
+				continue
 	# 买入股票
-
+	buy_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'])
+	if buy_count != 0:
+		if T.BUY_AMOUNT is None:
+			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 3
+		log(f'trade_on_handle_bar(): buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}, T.codes_recommended=\n{T.codes_recommended}')
+		for code in list(set(T.codes_recommended.keys())):
+			if  T.codes_recommended[code]['buy_status'] is None:
+				continue
+			if current_time >= TRANSACTION_CLOSE_TIME and T.codes_recommended[code]['buy_status'] == 'BUY_AT_AMOUNT':
+				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_recommended[code]['buy_status'])
+				T.codes_recommended[code]['buy_status'] = T.codes_recommended[code]['buy_status'] + '_DONE'
+				continue
+			if T.codes_recommended[code]['buy_status'] == 'BUY_AT_BREAKOUT':
+				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_recommended[code]['buy_status'])
+				T.codes_recommended[code]['buy_status'] = T.codes_recommended[code]['buy_status'] + '_DONE'
+				continue
 
 def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
 	# 使用 lateral_high_date 获取lateral_high价格
