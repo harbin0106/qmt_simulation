@@ -22,7 +22,8 @@ def init(contextInfo):
 	init_load_codes_in_position(contextInfo)
 	# init_load_recommendations_from_excel(contextInfo)
 	init_load_recommendations_from_db(contextInfo)
-	contextInfo.set_universe(list(set(T.codes_recommended.keys()) | set(T.codes_in_position.keys())))
+	T.codes_all = T.codes_recommended
+	contextInfo.set_universe(list(set(T.codes_all.keys())))
 	contextInfo.set_account(T.accountid)
 	# Start the opening call auction timer
 	today = date.today()
@@ -31,7 +32,6 @@ def init(contextInfo):
 	# For testing only
 	# startTime = "2025-10-31 09:15:00"
 	contextInfo.run_time("on_timer", "3nSecond", startTime)
-	init_open_log_file(contextInfo)
 
 def init_load_codes_in_position(contextInfo):
 	# 获取持仓股票代码并加入T.codes_in_position
@@ -74,8 +74,6 @@ def init_load_codes_in_position(contextInfo):
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
 			T.codes_in_position[code]['buy_date'] = buy_dates.get(code, '')  # 使用成交日期
-			T.codes_in_position[code]['recommend_date'] = ''
-			T.codes_in_position[code]['sell_status'] = ''
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
 
 def init_load_recommendations_from_excel(contextInfo):
@@ -120,10 +118,13 @@ def init_load_recommendations_from_db(contextInfo):
 		T.codes_recommended[df.code]['effective'] = df.effective
 		T.codes_recommended[df.code]['sell_status'] = None
 		T.codes_recommended[df.code]['buy_status'] = None
-	T.codes_to_sell = T.codes_recommended.copy()
 	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
+	# 判断T.codes_in_postition在T.codes_recommended中是否存在
+	for code in T.codes_in_position:
+		if code not in T.codes_recommended:
+			log(f'init_load_recommendations_from_db(): Error! code {code} in position but not in recommendations!')
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -157,7 +158,7 @@ def init_trade_parameters(contextInfo):
 	T.SLOPE = np.log(1.09)
 	T.TARGET_DATE = '20251205'
 
-def init_open_log_file(contextInfo):
+def open_log_file(contextInfo):
 	# 打开日志文件
 	current_date = date.today().strftime('%Y%m%d')
 	path = 'C:/a/trade/量化/中信证券/code/'
@@ -223,6 +224,9 @@ def after_init(contextInfo):
 	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
 	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
 	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
+	df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+	log(f'after_init(): T.codes_all=\n{df.to_string()}')
+	open_log_file(contextInfo)
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -280,13 +284,11 @@ def trade_on_handle_bar(contextInfo):
 	MARKET_OPEN_TIME = '09:30:00'
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	TRANSACTION_CLOSE_TIME = '14:56:40'
-	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
-	# log(f'\ntrade_on_handle_bar(): T.codes_recommended=\n{df.to_string()}')
 	# log(f'bar_date={bar_date}, current_date={current_date}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if MARKET_OPEN_TIME <= current_time <= TRANSACTION_CLOSE_TIME:
-		for code in list(set(T.codes_recommended.keys())):
+		for code in list(set(T.codes_all.keys())):
 			# 获取今日开盘价
 			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			open = market_data_open[code]['open'][0]
@@ -307,7 +309,7 @@ def trade_on_handle_bar(contextInfo):
 			else:
 				market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 				current = market_data_last_price[code]['lastPrice'][0]
-			lateral_high_date = T.codes_recommended[code]['lateral_high_date']
+			lateral_high_date = T.codes_all[code]['lateral_high_date']
 			# up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 			up_stop_price = 0
             # 使用 lateral_high_date 获取lateral_high价格
@@ -333,77 +335,92 @@ def trade_on_handle_bar(contextInfo):
 			closes_ma5 = closes.rolling(window=5).mean()
 			closes_ma5_derivative = closes_ma5.diff(1).dropna()
 			ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
-			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.4f}, rates[-2]={rates[-2]:.4f}, rates[-3]={rates[-3]:.4f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}')
-			# 买入: 只要超过lateral_high就买入
-			if T.codes_recommended[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
-				T.codes_recommended[code]['buy_date'] = current_date
-				T.codes_recommended[code]['buy_status'] = 'BUY_AT_BREAKOUT'
-				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
+			if T.codes_all[code]['buy_date'] is not None and T.codes_all[code]['buy_date'] != current_date:
+				support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
+			else:
+				support, upper = 0, 0
+			log(f'{current_time} trade_on_handle_bar(): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.4f}, rates[-2]={rates[-2]:.4f}, rates[-3]={rates[-3]:.4f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, support={support:.2f}, upper={upper:.2f}')
+			# 买入: buy_date为None, 只要超过lateral_high就买入
+			if T.codes_all[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
+				T.codes_all[code]['buy_date'] = current_date
+				T.codes_all[code]['buy_status'] = 'BUY_AT_BREAKOUT'
+				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
 				continue
-			# 买入: 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
-			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_recommended[code]['buy_date'] is None and current > lateral_high and amount_ratios[-2] < 0.2 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
-				T.codes_recommended[code]['buy_date'] = current_date
-				T.codes_recommended[code]['buy_status'] = 'BUY_AT_AMOUNT'
-				log(f'{current_time} trade_on_handle_bar(BUY_AT_AMOUNT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}')
+			# 买入: buy_date为None, 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
+			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_all[code]['buy_date'] is None and current > lateral_high and amount_ratios[-2] < 0.2 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
+				T.codes_all[code]['buy_date'] = current_date
+				T.codes_all[code]['buy_status'] = 'BUY_AT_AMOUNT'
+				log(f'{current_time} trade_on_handle_bar(BUY_AT_AMOUNT): {code} {get_stock_name(contextInfo, code)}')
+			# 卖出, 必须有买入日期且买入日期不是今天
+			if T.codes_all[code]['buy_date'] is None:
+				continue
+			if T.codes_all[code]['buy_date'] == current_date:
+				continue
+			if T.codes_all[code]['sell_date'] is not None:
+				continue
 			# 卖出: 成交量大于16倍120日均量, 立即卖出
-			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_to_sell[code]['sell_status'] is None and amounts[-1] >= 16 * average_amount_120:
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_HIGH_AMOUNT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}')
-				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_HIGH_AMOUNT'
+			if current_time > CHECK_CLOSE_PRICE_TIME and amounts[-1] >= 16 * average_amount_120:
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_HIGH_AMOUNT): {code} {get_stock_name(contextInfo, code)}')
+				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_status'] = 'SELL_AT_HIGH_AMOUNT'
 				continue
 			# 卖出: 收盘价跌破水平突破线时刻
-			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_to_sell[code]['sell_status'] is None and current <= lateral_high:
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_LATERAL_HIGH): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
-				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_LATERAL_HIGH'	
+			if current_time > CHECK_CLOSE_PRICE_TIME and current <= lateral_high:
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
+				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_BREAKOUT'	
 				continue
 			# 卖出: 开盘价跌破水平支撑线时刻
-			if T.codes_to_sell[code]['sell_status'] is None and open <= lateral_high:
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN_BELOW_LATERAL_HIGH): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
-				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_LATERAL_HIGH'	
-				continue
-			if T.codes_to_sell[code]['buy_date'] is None:
+			if open <= lateral_high:
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN_BELOW_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
+				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_BREAKOUT'	
 				continue
 			# 卖出: 收盘价跌破支撑线的时刻
-			support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_to_sell[code]['buy_date'])
-			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_to_sell[code]['sell_status'] is None and current <= support and current  > lateral_high:
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_SUPPORT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, support={support:.2f}, upper={upper:.2f}')
-				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
+			if current_time > CHECK_CLOSE_PRICE_TIME and current <= support and current  > lateral_high:
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_SUPPORT): {code} {get_stock_name(contextInfo, code)}')
+				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
 				continue
 			# 卖出: 任何突破上轨的时刻
-			if T.codes_to_sell[code]['sell_status'] is None and current >= upper:
-				log(f'{current_time} trade_on_handle_bar(SELL_AT_CURRENT_ABOVE_UPPER): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, support={support:.2f}, upper={upper:.2f}')
-				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
+			if current >= upper:
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CURRENT_ABOVE_UPPER): {code} {get_stock_name(contextInfo, code)}')
+				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
 			continue
 	# 卖出股票
-	sell_count = sum(1 for code in T.codes_to_sell if T.codes_to_sell[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_LATERAL_HIGH', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_LATERAL_HIGH', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CURRENT_ABOVE_UPPER'])
+	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CURRENT_ABOVE_UPPER'])
 	if sell_count != 0:
-		log(f'trade_on_handle_bar(): sell_count={sell_count}, T.codes_to_sell=\n{T.codes_to_sell}')
-		for code in list(set(T.codes_to_sell.keys())):
-			if  T.codes_to_sell[code]['sell_status'] is None:
+		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+		log(f'trade_on_handle_bar(): sell_count={sell_count}, T.codes_all=\n{df.to_string()}')
+		for code in list(set(T.codes_all.keys())):
+			if  T.codes_all[code]['sell_status'] is None:
 				continue
-			if current_time >= TRANSACTION_CLOSE_TIME and (T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_LATERAL_HIGH' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
-				trade_sell_stock(contextInfo, code, T.codes_to_sell[code]['sell_status'])
-				T.codes_to_sell[code]['sell_status'] = T.codes_to_sell[code]['sell_status'] + '_DONE'
+			if current_time >= TRANSACTION_CLOSE_TIME and (T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
+				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
 				continue
-			if T.codes_to_sell[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_LATERAL_HIGH' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_to_sell[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
-				trade_sell_stock(contextInfo, code, T.codes_to_sell[code]['sell_status'])
-				T.codes_to_sell[code]['sell_status'] = T.codes_to_sell[code]['sell_status'] + '_DONE'
+			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
+				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
 				continue
 	# 买入股票
-	buy_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'])
+	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'])
 	if buy_count != 0:
 		if T.BUY_AMOUNT is None:
 			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 3
-		log(f'trade_on_handle_bar(): buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}, T.codes_recommended=\n{T.codes_recommended}')
-		for code in list(set(T.codes_recommended.keys())):
-			if  T.codes_recommended[code]['buy_status'] is None:
+		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+		log(f'trade_on_handle_bar(): buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}, T.codes_all=\n{df.to_string()}')
+		for code in list(set(T.codes_all.keys())):
+			if  T.codes_all[code]['buy_status'] is None:
 				continue
-			if current_time >= TRANSACTION_CLOSE_TIME and T.codes_recommended[code]['buy_status'] == 'BUY_AT_AMOUNT':
-				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_recommended[code]['buy_status'])
-				T.codes_recommended[code]['buy_status'] = T.codes_recommended[code]['buy_status'] + '_DONE'
+			if current_time >= TRANSACTION_CLOSE_TIME and T.codes_all[code]['buy_status'] == 'BUY_AT_AMOUNT':
+				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
+				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				continue
-			if T.codes_recommended[code]['buy_status'] == 'BUY_AT_BREAKOUT':
-				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_recommended[code]['buy_status'])
-				T.codes_recommended[code]['buy_status'] = T.codes_recommended[code]['buy_status'] + '_DONE'
+			if T.codes_all[code]['buy_status'] == 'BUY_AT_BREAKOUT':
+				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
+				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				continue
 
 def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
@@ -445,6 +462,7 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	for i in range(buy_date_index + 1, len(dates)):
 		if opens[i] < closes[i-1] * 0.99 and rates[i-1] > 0.09 and rates[i-2] > 0.09 and rates[i-3] > 0.09:
 			new_buy_date = dates[i]  # 检查到后, 再把索引转换成日期
+			log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, buy_date updated from {buy_date} to {new_buy_date} due to open={opens[i]:.2f} < previous close * 0.99 = {closes[i-1] * 0.99:.2f}, rates[{i-1}]={rates[i-1]:.4f}, rates[{i-2}]={rates[i-2]:.4f}, rates[{i-3}]={rates[i-3]:.4f}')
 			break
 	buy_date = new_buy_date
 
@@ -459,7 +477,7 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	trading_days_count = len(trading_dates) - 1  # 不包括buy_date
 	y_log_support = T.SLOPE * trading_days_count + np.log(ref_point * 0.96)
 	y_log_upper = T.SLOPE * trading_days_count + np.log(ref_point * 1.12)
-	log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, buy_date={buy_date}, current_date={current_date}, np.exp(y_log_support)={np.exp(y_log_support):.2f}, np.exp(y_log_upper)={np.exp(y_log_upper):.2f}')
+	# log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, buy_date={buy_date}, current_date={current_date}, np.exp(y_log_support)={np.exp(y_log_support):.2f}, np.exp(y_log_upper)={np.exp(y_log_upper):.2f}')
 	return np.exp(y_log_support), np.exp(y_log_upper)
 
 def trade_query_info(contextInfo):
@@ -501,7 +519,7 @@ def trade_sell_stock(contextInfo, code, comment):
 	for dt in positions:
 		if f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}" != code:
 			continue
-		log(f'trade_sell_stock(): 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+		log(f'trade_sell_stock():  {code} {get_stock_name(contextInfo, code)}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
 		volume = dt.m_nCanUseVolume  # 可卖数量
 		break
