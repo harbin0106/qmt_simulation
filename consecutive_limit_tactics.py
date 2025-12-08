@@ -224,7 +224,7 @@ def after_init(contextInfo):
 	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
 	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
 	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
-	trade_get_support_price(contextInfo)
+	trade_get_support_upper_price(contextInfo)
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -365,7 +365,7 @@ def trade_on_handle_bar(contextInfo):
 			# 卖出: 收盘价跌破支撑线的时刻
 
 			continue
-			support_price = trade_get_support_price(contextInfo, code, recommend_date)
+			support_price = trade_get_support_upper_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
 			# 	pre_close = open / 1.05
@@ -406,7 +406,7 @@ def trade_on_handle_bar(contextInfo):
 			current = market_data_last_price[code]['lastPrice'][0]
 			recommend_date = T.codes_to_sell[code]['recommend_date']
 			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
-			support_price = trade_get_support_price(contextInfo, code, recommend_date)
+			support_price = trade_get_support_upper_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
 			# 	pre_close = open / 1.05
@@ -466,15 +466,15 @@ def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
 	# log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, current={current:.2f}, lateral_high={lateral_high:.2f}, result={result}')
 	return result
 
-def trade_get_support_price(contextInfo, code='603933.SH', buy_date='20251127'):
+def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251127'):
 	if buy_date is None:
-		log(f'trade_get_support_price(): Error! buy_date is None for {code} {get_stock_name(contextInfo, code)}!')
+		log(f'trade_get_support_upper_price(): Error! buy_date is None for {code} {get_stock_name(contextInfo, code)}!')
 		return None
 	current_date = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	# 一次性获取该股票截止到当前交易日的所有数据
 	market_data_range = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1d', start_time='20250901', end_time=current_date, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 	if code not in market_data_range or market_data_range[code].empty:
-		log(f'trade_get_support_price(): Error! 未获取到 {code} 从 20200101 到 {current_date} 的市场数据!')
+		log(f'trade_get_support_upper_price(): Error! 未获取到 {code} 从 20200101 到 {current_date} 的市场数据!')
 		return None
 	df = market_data_range[code]
 	dates = df.index.tolist()
@@ -485,7 +485,7 @@ def trade_get_support_price(contextInfo, code='603933.SH', buy_date='20251127'):
 	rates = df['close'].pct_change().values
 	# 找到buy_date的索引
 	if buy_date not in dates:
-		log(f'trade_get_support_price(): Error! buy_date {buy_date} 不在数据中 for {code} {get_stock_name(contextInfo, code)}!')
+		log(f'trade_get_support_upper_price(): Error! buy_date {buy_date} 不在数据中 for {code} {get_stock_name(contextInfo, code)}!')
 		return None
 	buy_date_index = dates.index(buy_date)
 	# 通过索引形成的循环去检查条件是否满足
@@ -502,13 +502,13 @@ def trade_get_support_price(contextInfo, code='603933.SH', buy_date='20251127'):
 	open = df.loc[buy_date, 'open']
 	close = df.loc[buy_date, 'close']
 	ref_point = (high + low + open + close) / 4
-	support_point = ref_point * 0.96
 	# 计算从buy_date到current_date的交易日天数，不包括停牌日期
 	trading_dates = contextInfo.get_trading_dates(code, buy_date, current_date, -1, '1d')
 	trading_days_count = len(trading_dates) - 1  # 不包括buy_date
-	y_log = T.SLOPE * trading_days_count + np.log(support_point)
-	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, support_point={support_point:.2f}, buy_date={buy_date}, current_date={current_date}, np.exp(y_log)={np.exp(y_log):.2f}')
-	return np.exp(y_log)
+	y_log_support = T.SLOPE * trading_days_count + np.log(ref_point * 0.96)
+	y_log_upper = T.SLOPE * trading_days_count + np.log(ref_point * 1.12)
+	log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, buy_date={buy_date}, current_date={current_date}, np.exp(y_log_support)={np.exp(y_log_support):.2f}, np.exp(y_log_upper)={np.exp(y_log_upper):.2f}')
+	return np.exp(y_log_support), np.exp(y_log_upper)
 
 def trade_query_info(contextInfo):
 	current_date = datetime.now().date()
