@@ -156,7 +156,7 @@ def init_trade_parameters(contextInfo):
 	# 算法参数
 	T.SLOPE = np.log(1.1098)
 	T.BUY_THRESHOLD = 1.096
-	T.TARGET_DATE = '20251114'
+	T.TARGET_DATE = '20251203'
 
 def init_open_log_file(contextInfo):
 	# 打开日志文件
@@ -346,7 +346,12 @@ def trade_on_handle_bar(contextInfo):
 				T.codes_recommended[code]['buy_date'] = current_date
 				T.codes_recommended[code]['buy_status'] = 'BUY_AT_VOLUME'
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_VOLUME): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}')
-			return
+			# 卖出: 成交量大于16倍120日均量, 立即卖出
+			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_to_sell[code]['sell_status'] is None and amounts[-1] >= 16 * average_amount_120:
+				log(f'{current_time} trade_on_handle_bar(SELL_IMMEDIATE_BY_VOLUME): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, average_amount_120={average_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}')
+				T.codes_to_sell[code]['sell_status'] = 'SELL_IMMEDIATE_BY_VOLUME'
+				continue
+			continue
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
 			# 	open = support_price - 0.01
