@@ -154,9 +154,9 @@ def init_trade_parameters(contextInfo):
 	# 印花税
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
-	T.SLOPE = np.log(1.1098)
+	T.SLOPE = np.log(1.09)
 	T.BUY_THRESHOLD = 1.096
-	T.TARGET_DATE = '20251204'
+	T.TARGET_DATE = '20251205'
 
 def init_open_log_file(contextInfo):
 	# 打开日志文件
@@ -219,11 +219,12 @@ def on_timer(contextInfo):
 def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
-	trade_query_info(contextInfo)
+	# trade_query_info(contextInfo)
 	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
 	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
 	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
 	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
+	trade_get_support_price(contextInfo)
 
 def handlebar(contextInfo):
 	if T.download_mode:
@@ -361,6 +362,8 @@ def trade_on_handle_bar(contextInfo):
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN_BELOW_LATERAL_HIGH): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_LATERAL_HIGH'	
 				continue
+			# 卖出: 收盘价跌破支撑线的时刻
+
 			continue
 			support_price = trade_get_support_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
@@ -463,22 +466,49 @@ def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
 	# log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, current={current:.2f}, lateral_high={lateral_high:.2f}, result={result}')
 	return result
 
-def trade_get_support_price(contextInfo, code='600167.SH', recommend_date='20250923', current_date=None):
-	if current_date is None:
-		current_date = date.today().strftime('%Y%m%d')
-	# 判断recommend_date早于current_date，使用日期对象比较
-	if datetime.strptime(recommend_date, '%Y%m%d').date() >= datetime.strptime(current_date, '%Y%m%d').date():
-		log(f'trade_get_support_price(): Error! recommend_date {recommend_date} is not earlier than current_date {current_date}!')
+def trade_get_support_price(contextInfo, code='603933.SH', buy_date='20251127'):
+	if buy_date is None:
+		log(f'trade_get_support_price(): Error! buy_date is None for {code} {get_stock_name(contextInfo, code)}!')
 		return None
-	# 获取从recommend_date到current_date的收盘价数据
-	market_data = contextInfo.get_market_data_ex(['close'], [code], period='1d', start_time=recommend_date, end_time=current_date, count=-1, dividend_type='front', fill_data=False, subscribe=True)
-	# 计算交易日天数，不包括停牌日期
-	closes = market_data[code]['close']
-	trading_days_count = closes.dropna().shape[0]
-	recommendation_close = closes[0]
-	support_price = np.exp((trading_days_count - 1) * T.SLOPE + np.log(recommendation_close * 0.9))
-	# log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, closes={[f"{x:.2f}" for x in closes.tolist()]}, recommendation_close={recommendation_close:.2f}, support_price={support_price:.2f}, recommend_date={recommend_date}, current_date={current_date}')
-	return support_price
+	current_date = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
+	# 一次性获取该股票截止到当前交易日的所有数据
+	market_data_range = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1d', start_time='20250901', end_time=current_date, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+	if code not in market_data_range or market_data_range[code].empty:
+		log(f'trade_get_support_price(): Error! 未获取到 {code} 从 20200101 到 {current_date} 的市场数据!')
+		return None
+	df = market_data_range[code]
+	dates = df.index.tolist()
+	# 先把opens, closes计算出来
+	opens = df['open'].values
+	closes = df['close'].values
+	# 计算rates (涨幅)
+	rates = df['close'].pct_change().values
+	# 找到buy_date的索引
+	if buy_date not in dates:
+		log(f'trade_get_support_price(): Error! buy_date {buy_date} 不在数据中 for {code} {get_stock_name(contextInfo, code)}!')
+		return None
+	buy_date_index = dates.index(buy_date)
+	# 通过索引形成的循环去检查条件是否满足
+	new_buy_date = buy_date
+	for i in range(buy_date_index + 1, len(dates)):
+		if opens[i] < closes[i-1] * 0.99 and rates[i-1] > 0.09 and rates[i-2] > 0.09 and rates[i-3] > 0.09:
+			new_buy_date = dates[i]  # 检查到后, 再把索引转换成日期
+			break
+	buy_date = new_buy_date
+
+	# 从df中获取buy_date的最高价, 最低价, 开盘价和收盘价数据
+	high = df.loc[buy_date, 'high']
+	low = df.loc[buy_date, 'low']
+	open = df.loc[buy_date, 'open']
+	close = df.loc[buy_date, 'close']
+	ref_point = (high + low + open + close) / 4
+	support_point = ref_point * 0.96
+	# 计算从buy_date到current_date的交易日天数，不包括停牌日期
+	trading_dates = contextInfo.get_trading_dates(code, buy_date, current_date, -1, '1d')
+	trading_days_count = len(trading_dates) - 1  # 不包括buy_date
+	y_log = T.SLOPE * trading_days_count + np.log(support_point)
+	log(f'trade_get_support_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, support_point={support_point:.2f}, buy_date={buy_date}, current_date={current_date}, np.exp(y_log)={np.exp(y_log):.2f}')
+	return np.exp(y_log)
 
 def trade_query_info(contextInfo):
 	current_date = datetime.now().date()
