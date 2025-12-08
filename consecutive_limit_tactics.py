@@ -362,8 +362,18 @@ def trade_on_handle_bar(contextInfo):
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN_BELOW_LATERAL_HIGH): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}')
 				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_LATERAL_HIGH'	
 				continue
+			if T.codes_to_sell[code]['buy_date'] is None:
+				continue
 			# 卖出: 收盘价跌破支撑线的时刻
-
+			support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_to_sell[code]['buy_date'])
+			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_to_sell[code]['sell_status'] is None and current <= support and current  > lateral_high:
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_SUPPORT): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, support={support:.2f}, upper={upper:.2f}')
+				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
+				continue
+			# 卖出: 任何突破上轨的时刻
+			if T.codes_to_sell[code]['sell_status'] is None and current >= upper:
+				log(f'{current_time} trade_on_handle_bar(SELL_AT_CURRENT_ABOVE_UPPER): {code} {get_stock_name(contextInfo, code)}, pre_close={pre_close:.2f}, pre_low={pre_low:.2f}, open={open:.2f}, current={current:.2f}, lateral_high_date={lateral_high_date}, up_stop_price={up_stop_price:.2f}, lateral_high={lateral_high:.2f}, support={support:.2f}, upper={upper:.2f}')
+				T.codes_to_sell[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
 			continue
 			support_price = trade_get_support_upper_price(contextInfo, code, recommend_date)
 			# if code == '002255.SZ':
@@ -485,7 +495,7 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	rates = df['close'].pct_change().values
 	# 找到buy_date的索引
 	if buy_date not in dates:
-		log(f'trade_get_support_upper_price(): Error! buy_date {buy_date} 不在数据中 for {code} {get_stock_name(contextInfo, code)}!')
+		log(f'trade_get_support_upper_price(): Error! buy_date {buy_date} 不在数据中{dates} for {code} {get_stock_name(contextInfo, code)}!')
 		return None
 	buy_date_index = dates.index(buy_date)
 	# 通过索引形成的循环去检查条件是否满足
