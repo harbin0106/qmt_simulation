@@ -284,14 +284,12 @@ def trade_on_handle_bar(contextInfo):
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if MARKET_OPEN_TIME <= current_time <= TRANSACTION_CLOSE_TIME:
 		for code in list(set(T.codes_all.keys())):
-			# 获取今日开盘价
-			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
-			open = market_data_open[code]['open'][0]
-			# 获取昨日收盘价和最低价
-			market_data_pre = contextInfo.get_market_data_ex(['close', 'low'], [code], period='1d', end_time=T.CURRENT_DATE, count=2, dividend_type='front', fill_data=False, subscribe=True)
+			# 获取今日开盘价, 昨日收盘价和昨日最低价
+			market_data = contextInfo.get_market_data_ex(['open', 'close', 'low'], [code], period='1d', end_time=T.CURRENT_DATE, count=2, dividend_type='front', fill_data=False, subscribe=True)
 			# [0]是昨天，[1]是今天
-			pre_close = market_data_pre[code]['close'][0]
-			pre_low = market_data_pre[code]['low'][0]
+			open = market_data[code]['open'][1]
+			pre_close = market_data[code]['close'][0]
+			pre_low = market_data[code]['low'][0]
 			# 获取当前的最新价格
 			if T.TARGET_DATE != '':
 				bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
@@ -443,10 +441,11 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	if buy_date is None:
 		log(f'trade_get_support_upper_price(): Error! buy_date is None for {code} {get_stock_name(contextInfo, code)}!')
 		return None
-	# 一次性获取该股票截止到当前交易日的所有数据
-	market_data_range = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1d', start_time='20250901', end_time=T.CURRENT_DATE, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+	# 一次性获取该股票从buy_date前推7日到当前交易日的所有数据
+	start_date = (datetime.strptime(buy_date, '%Y%m%d') - timedelta(days=7)).strftime('%Y%m%d')
+	market_data_range = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1d', start_time=start_date, end_time=T.CURRENT_DATE, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 	if code not in market_data_range or market_data_range[code].empty:
-		log(f'trade_get_support_upper_price(): Error! 未获取到 {code} 从 20200101 到 {T.CURRENT_DATE} 的市场数据!')
+		log(f'trade_get_support_upper_price(): Error! 未获取到 {code} 从 {start_date} 到 {T.CURRENT_DATE} 的市场数据!')
 		return None
 	df = market_data_range[code]
 	dates = df.index.tolist()
