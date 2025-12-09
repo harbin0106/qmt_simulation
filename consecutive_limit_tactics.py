@@ -15,9 +15,9 @@ def init(contextInfo):
 	T.download_mode = False
 	if T.download_mode:
 		return
+	init_trade_parameters(contextInfo)
 	init_clear_log_file(contextInfo)
 	log('\n' + '=' * 40 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 40)
-	init_trade_parameters(contextInfo)
 	db_init()
 	init_load_codes_in_position(contextInfo)
 	# init_load_recommendations_from_excel(contextInfo)
@@ -98,7 +98,7 @@ def init_load_recommendations_from_excel(contextInfo):
 def init_load_recommendations_from_db(contextInfo):
 	T.codes_recommended = {}
 	# 获取上一个交易日
-	recommend_date = trade_get_previous_trade_date(contextInfo)
+	# recommend_date = trade_get_previous_trade_date(contextInfo)
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
 	# 判断recommend_date是否是数据库里的最新日期
@@ -143,7 +143,7 @@ def init_trade_parameters(contextInfo):
 	T.prType_buy_1 = 6
 	T.prType_latest = 5
 	T.prType_designated = 11
-	T.strategyName = 'UpStopTactics'
+	T.strategyName = 'sleep_dragon'
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
 	T.quickTrade = 2 	
 	T.price_invalid = 0
@@ -156,20 +156,19 @@ def init_trade_parameters(contextInfo):
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
 	T.SLOPE = np.log(1.09)
-	T.TARGET_DATE = ''
+	T.TARGET_DATE = '20251204'
+	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 
 def open_log_file(contextInfo):
 	# 打开日志文件
-	current_date = date.today().strftime('%Y%m%d')
 	path = 'C:/a/trade/量化/中信证券/code/'
-	file_name = 'QMT ' + current_date + ' log.txt'
+	file_name = 'QMT ' + T.CURRENT_DATE + ' log.txt'
 	os.startfile(path + file_name)
 
 def init_clear_log_file(contextInfo):
 	# 清除日志文件内容
-	current_date = date.today().strftime('%Y%m%d')
 	path = 'C:/a/trade/量化/中信证券/code/'
-	file_name = 'QMT ' + current_date + ' log.txt'
+	file_name = 'QMT ' + T.CURRENT_DATE + ' log.txt'
 	with open(path + file_name, 'w', encoding='utf-8') as f:
 		pass  # 清空文件内容
 
@@ -249,7 +248,6 @@ def handlebar(contextInfo):
 
 def trade_get_previous_trade_date(contextInfo):
 	today = date.today()
-	current_date = today.strftime('%Y%m%d')
 	# 否则返回之前的交易日
 	trading_dates = contextInfo.get_trading_dates('000001.SH', '', '', 2, '1d')
 	if len(trading_dates) != 2:
@@ -260,7 +258,7 @@ def trade_get_previous_trade_date(contextInfo):
 			return previous_trade_date.strftime('%Y%m%d')
 		return today.strftime('%Y%m%d')
 	# 规避trading_dates不能真实反映当前日期的问题
-	if trading_dates[1] == current_date:
+	if trading_dates[1] == T.CURRENT_DATE:
 		recommend_date = trading_dates[0]
 	else:
 		recommend_date = trading_dates[1]
@@ -274,27 +272,23 @@ def trade_get_cash(contextInfo):
 	return float(account[0].m_dAvailable)	
 
 def trade_on_handle_bar(contextInfo):
-	if T.TARGET_DATE != '':
-		current_date = T.TARGET_DATE
-	else:
-		current_date = date.today().strftime('%Y%m%d')
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
-	if current_date != bar_date:
-		log(f'trade_on_handle_bar(): Error! current_date != bar_date! {current_date}, {bar_date}')
+	if T.CURRENT_DATE != bar_date:
+		log(f'trade_on_handle_bar(): Error! T.CURRENT_DATE != bar_date! {T.CURRENT_DATE}, {bar_date}')
 		return
 	MARKET_OPEN_TIME = '09:30:00'
 	CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	TRANSACTION_CLOSE_TIME = '14:56:40'
-	# log(f'bar_date={bar_date}, current_date={current_date}')
+	# log(f'bar_date={bar_date}, T.CURRENT_DATE={T.CURRENT_DATE}')
 	# 获取当前时间
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if MARKET_OPEN_TIME <= current_time <= TRANSACTION_CLOSE_TIME:
 		for code in list(set(T.codes_all.keys())):
 			# 获取今日开盘价
-			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_open = contextInfo.get_market_data_ex(['open'], [code], period='1d', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			open = market_data_open[code]['open'][0]
 			# 获取昨日收盘价和最低价
-			market_data_pre = contextInfo.get_market_data_ex(['close', 'low'], [code], period='1d', end_time=current_date, count=2, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_pre = contextInfo.get_market_data_ex(['close', 'low'], [code], period='1d', end_time=T.CURRENT_DATE, count=2, dividend_type='front', fill_data=False, subscribe=True)
 			# [0]是昨天，[1]是今天
 			pre_close = market_data_pre[code]['close'][0]
 			pre_low = market_data_pre[code]['low'][0]
@@ -308,7 +302,7 @@ def trade_on_handle_bar(contextInfo):
 					return
 				current = market_data_last_price[code]['high'][0]
 			else:
-				market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=current_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+				market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 				current = market_data_last_price[code]['lastPrice'][0]
 			lateral_high_date = T.codes_all[code]['lateral_high_date']
 			# up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
@@ -320,7 +314,7 @@ def trade_on_handle_bar(contextInfo):
 				return False
 			lateral_high = market_data_lateral_high[code]['high'][0]
 			# 获取120日的成交额
-			market_data = contextInfo.get_market_data_ex(['amount', 'close'], [code], period='1d', end_time=current_date, count=120, dividend_type='front', fill_data=False, subscribe=True)
+			market_data = contextInfo.get_market_data_ex(['amount', 'close'], [code], period='1d', end_time=T.CURRENT_DATE, count=120, dividend_type='front', fill_data=False, subscribe=True)
 			amounts = market_data[code]['amount']
 			closes = market_data[code]['close']
 			average_amount_120 = amounts.mean()
@@ -336,7 +330,7 @@ def trade_on_handle_bar(contextInfo):
 			closes_ma5 = closes.rolling(window=5).mean()
 			closes_ma5_derivative = closes_ma5.diff(1).dropna()
 			ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
-			if T.codes_all[code]['buy_date'] is not None and T.codes_all[code]['buy_date'] != current_date:
+			if T.codes_all[code]['buy_date'] is not None and T.codes_all[code]['buy_date'] != T.CURRENT_DATE:
 				support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
 			else:
 				support, upper = 0, 0
@@ -344,50 +338,50 @@ def trade_on_handle_bar(contextInfo):
 			
 			# 买入: buy_date为None, 只要超过lateral_high就买入
 			if T.codes_all[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
-				T.codes_all[code]['buy_date'] = current_date
+				T.codes_all[code]['buy_date'] = T.CURRENT_DATE
 				T.codes_all[code]['buy_status'] = 'BUY_AT_BREAKOUT'
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
 				continue
 			# 买入: buy_date为None, 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
 			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_all[code]['buy_date'] is None and current > lateral_high and amount_ratios[-2] < 0.2 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
-				T.codes_all[code]['buy_date'] = current_date
+				T.codes_all[code]['buy_date'] = T.CURRENT_DATE
 				T.codes_all[code]['buy_status'] = 'BUY_AT_AMOUNT'
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_AMOUNT): {code} {get_stock_name(contextInfo, code)}')
 			# 卖出, 必须有买入日期且买入日期不是今天
 			if T.codes_all[code]['buy_date'] is None:
 				continue
-			if T.codes_all[code]['buy_date'] == current_date:
+			if T.codes_all[code]['buy_date'] == T.CURRENT_DATE:
 				continue
 			if T.codes_all[code]['sell_date'] is not None:
 				continue
 			# 卖出: 成交量大于16倍120日均量, 立即卖出
 			if current_time > CHECK_CLOSE_PRICE_TIME and amounts[-1] >= 16 * average_amount_120:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_HIGH_AMOUNT): {code} {get_stock_name(contextInfo, code)}')
-				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 				T.codes_all[code]['sell_status'] = 'SELL_AT_HIGH_AMOUNT'
 				continue
 			# 卖出: 收盘价跌破水平突破线时刻
 			if current_time > CHECK_CLOSE_PRICE_TIME and current <= lateral_high:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
-				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 				T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_BREAKOUT'
 				continue
 			# 卖出: 开盘价跌破水平支撑线时刻
 			if open <= lateral_high:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN_BELOW_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
-				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 				T.codes_all[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_BREAKOUT'
 				continue
 			# 卖出: 收盘价跌破支撑线的时刻
 			if current_time > CHECK_CLOSE_PRICE_TIME and current <= support and current  > lateral_high:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_SUPPORT): {code} {get_stock_name(contextInfo, code)}')
-				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 				T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
 				continue
 			# 卖出: 任何突破上轨的时刻
 			if current >= upper:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_CURRENT_ABOVE_UPPER): {code} {get_stock_name(contextInfo, code)}')
-				T.codes_all[code]['sell_date'] = current_date
+				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 				T.codes_all[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
 			continue
 	# 卖出股票
@@ -449,11 +443,10 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	if buy_date is None:
 		log(f'trade_get_support_upper_price(): Error! buy_date is None for {code} {get_stock_name(contextInfo, code)}!')
 		return None
-	current_date = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	# 一次性获取该股票截止到当前交易日的所有数据
-	market_data_range = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1d', start_time='20250901', end_time=current_date, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+	market_data_range = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1d', start_time='20250901', end_time=T.CURRENT_DATE, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 	if code not in market_data_range or market_data_range[code].empty:
-		log(f'trade_get_support_upper_price(): Error! 未获取到 {code} 从 20200101 到 {current_date} 的市场数据!')
+		log(f'trade_get_support_upper_price(): Error! 未获取到 {code} 从 20200101 到 {T.CURRENT_DATE} 的市场数据!')
 		return None
 	df = market_data_range[code]
 	dates = df.index.tolist()
@@ -483,16 +476,15 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	close = df.loc[buy_date, 'close']
 	ref_point = (high + low + open + close) / 4
 	# 计算从buy_date到current_date的交易日天数，不包括停牌日期
-	trading_dates = contextInfo.get_trading_dates(code, buy_date, current_date, -1, '1d')
+	trading_dates = contextInfo.get_trading_dates(code, buy_date, T.CURRENT_DATE, -1, '1d')
 	trading_days_count = len(trading_dates) - 1  # 不包括buy_date
 	y_log_support = T.SLOPE * trading_days_count + np.log(ref_point * 0.96)
 	y_log_upper = T.SLOPE * trading_days_count + np.log(ref_point * 1.12)
-	# log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, buy_date={buy_date}, current_date={current_date}, np.exp(y_log_support)={np.exp(y_log_support):.2f}, np.exp(y_log_upper)={np.exp(y_log_upper):.2f}')
+	# log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, buy_date={buy_date}, T.CURRENT_DATE={T.CURRENT_DATE}, np.exp(y_log_support)={np.exp(y_log_support):.2f}, np.exp(y_log_upper)={np.exp(y_log_upper):.2f}')
 	return np.exp(y_log_support), np.exp(y_log_upper)
 
 def trade_query_info(contextInfo):
-	current_date = datetime.now().date()
-	N_days_ago = current_date - timedelta(days=7)
+	N_days_ago = T.CURRENT_DATE - timedelta(days=7)
 	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
 	log("trade_query_info(): 最近7天的委托记录:")
 	for o in orders:
@@ -745,13 +737,10 @@ def get_stock_name(contextInfo, code):
 		return "get_stock_name(): Error! 未知"
 
 def log(*args):
-	message = ' '.join(str(arg) for arg in args)
-	message = '\t' + message
-	current_date = date.today().strftime('%Y%m%d')
-	path = 'C:/a/trade/量化/中信证券/code/'
-	file_name = 'QMT ' + current_date + ' log.txt'
-	with open(path + file_name, 'a', encoding='utf-8') as f:
-		f.write(message + '\n')
+	message = '\t' + ''.join(str(arg) for arg in args) + '\n'
+	file_path = 'C:/a/trade/量化/中信证券/code/' + 'QMT ' + T.CURRENT_DATE + ' log.txt'
+	with open(file_path, 'a', encoding='utf-8') as f:
+		f.write(message)
 
 def db_init():
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
