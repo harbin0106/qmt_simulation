@@ -346,14 +346,12 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes_all[code]['buy_date'] is None and current >= lateral_high and pre_low <= lateral_high:
 				T.codes_all[code]['buy_date'] = current_date
 				T.codes_all[code]['buy_status'] = 'BUY_AT_BREAKOUT'
-				db_update_buy_status(code, T.codes_all[code]['buy_status'])
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
 				continue
 			# 买入: buy_date为None, 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
 			if current_time > CHECK_CLOSE_PRICE_TIME and T.codes_all[code]['buy_date'] is None and current > lateral_high and amount_ratios[-2] < 0.2 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
 				T.codes_all[code]['buy_date'] = current_date
 				T.codes_all[code]['buy_status'] = 'BUY_AT_AMOUNT'
-				db_update_buy_status(code, T.codes_all[code]['buy_status'])
 				log(f'{current_time} trade_on_handle_bar(BUY_AT_AMOUNT): {code} {get_stock_name(contextInfo, code)}')
 			# 卖出, 必须有买入日期且买入日期不是今天
 			if T.codes_all[code]['buy_date'] is None:
@@ -367,35 +365,30 @@ def trade_on_handle_bar(contextInfo):
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_HIGH_AMOUNT): {code} {get_stock_name(contextInfo, code)}')
 				T.codes_all[code]['sell_date'] = current_date
 				T.codes_all[code]['sell_status'] = 'SELL_AT_HIGH_AMOUNT'
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				continue
 			# 卖出: 收盘价跌破水平突破线时刻
 			if current_time > CHECK_CLOSE_PRICE_TIME and current <= lateral_high:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
 				T.codes_all[code]['sell_date'] = current_date
 				T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_BREAKOUT'
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				continue
 			# 卖出: 开盘价跌破水平支撑线时刻
 			if open <= lateral_high:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_OPEN_BELOW_BREAKOUT): {code} {get_stock_name(contextInfo, code)}')
 				T.codes_all[code]['sell_date'] = current_date
 				T.codes_all[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_BREAKOUT'
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				continue
 			# 卖出: 收盘价跌破支撑线的时刻
 			if current_time > CHECK_CLOSE_PRICE_TIME and current <= support and current  > lateral_high:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_CLOSE_BELOW_SUPPORT): {code} {get_stock_name(contextInfo, code)}')
 				T.codes_all[code]['sell_date'] = current_date
 				T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				continue
 			# 卖出: 任何突破上轨的时刻
 			if current >= upper:
 				log(f'{current_time} trade_on_handle_bar(SELL_AT_CURRENT_ABOVE_UPPER): {code} {get_stock_name(contextInfo, code)}')
 				T.codes_all[code]['sell_date'] = current_date
 				T.codes_all[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 			continue
 	# 卖出股票
 	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CURRENT_ABOVE_UPPER'])
@@ -407,13 +400,15 @@ def trade_on_handle_bar(contextInfo):
 				continue
 			if current_time >= TRANSACTION_CLOSE_TIME and (T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+				db_update_sell_date(code, T.codes_all[code]['sell_date'])
+				db_update_sell_status(code, T.codes_all[code]['sell_status'])				
 				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				continue
 			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+				db_update_sell_date(code, T.codes_all[code]['sell_date'])
+				db_update_sell_status(code, T.codes_all[code]['sell_status'])				
 				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				continue
 	# 买入股票
 	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'])
@@ -427,13 +422,15 @@ def trade_on_handle_bar(contextInfo):
 				continue
 			if current_time >= TRANSACTION_CLOSE_TIME and T.codes_all[code]['buy_status'] == 'BUY_AT_AMOUNT':
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
+				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
+				db_update_buy_status(code, T.codes_all[code]['buy_status'])				
 				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
-				db_update_buy_status(code, T.codes_all[code]['buy_status'])
 				continue
 			if T.codes_all[code]['buy_status'] == 'BUY_AT_BREAKOUT':
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
-				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
+				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])
+				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				continue
 
 def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
@@ -839,11 +836,25 @@ def db_update_buy_status(code, buy_status):
 	cursor.execute('UPDATE stock_status SET buy_status = ? WHERE code = ?', (buy_status, code))
 	conn.commit()
 	conn.close()
+
+def db_update_buy_date(code, buy_date):
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('UPDATE stock_status SET buy_date = ? WHERE code = ?', (buy_date, code))
+	conn.commit()
+	conn.close()
 	
 def db_update_sell_status(code, sell_status):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
 	cursor.execute('UPDATE stock_status SET sell_status = ? WHERE code = ?', (sell_status, code))
+	conn.commit()
+	conn.close()
+
+def db_update_sell_date(code, sell_date):
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('UPDATE stock_status SET sell_date = ? WHERE code = ?', (sell_date, code))
 	conn.commit()
 	conn.close()
 	
