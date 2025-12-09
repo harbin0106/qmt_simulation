@@ -156,7 +156,7 @@ def init_trade_parameters(contextInfo):
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
 	T.SLOPE = np.log(1.09)
-	T.TARGET_DATE = '20251205'
+	T.TARGET_DATE = ''
 
 def open_log_file(contextInfo):
 	# 打开日志文件
@@ -313,7 +313,7 @@ def trade_on_handle_bar(contextInfo):
 			lateral_high_date = T.codes_all[code]['lateral_high_date']
 			# up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 			up_stop_price = 0
-            # 使用 lateral_high_date 获取lateral_high价格
+			# 使用 lateral_high_date 获取lateral_high价格
 			market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			if market_data_lateral_high[code].empty:
 				log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
@@ -692,11 +692,15 @@ def order_callback(contextInfo, orderInfo):
 	# log(f'order_callback(): {code} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
-		log(f'order_callback(): 委托已全部成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
+		log(f'order_callback(): 委托已全部成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.2f}, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
+		if '买' in orderInfo.m_strOptName:
+			db_update_buy_price(code, orderInfo.m_dTradedPrice)
+		elif '卖' in orderInfo.m_strOptName:
+			db_update_sell_price(code, orderInfo.m_dTradedPrice)
 	elif orderInfo.m_nOrderStatus == 55:  # 部成
-		log(f'order_callback(): 委托部分成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.2f}')
+		log(f'order_callback(): 委托部分成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.2f}, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
 	elif orderInfo.m_nOrderStatus == 54:  # 已撤
-		log(f'order_callback(): 委托已撤销 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}')
+		log(f'order_callback(): 委托已撤销 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
 	else:
 		return
 		# log(f'order_callback(): 委托状态更新 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 状态: {orderInfo.m_nOrderStatus}')
@@ -711,9 +715,9 @@ def deal_callback(contextInfo, dealInfo):
 	# 可以在这里添加更多逻辑，如更新全局变量、发送通知等
 	# 例如，检查是否为买入或卖出，并更新持仓统计
 	if dealInfo.m_nDirection == 48:  # 买入
-		log(f'deal_callback(): {code} {name}, 买入成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
+		log(f'deal_callback(): {code} {name}, 买入成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, m_strOptName={dealInfo.m_strOptName}')
 	elif dealInfo.m_nDirection == 49:  # 卖出
-		log(f'deal_callback(): {code} {name}, 卖出成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}')
+		log(f'deal_callback(): {code} {name}, 卖出成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, m_strOptName={dealInfo.m_strOptName}')
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
@@ -721,7 +725,7 @@ def position_callback(contextInfo, positionInfo):
 	name = get_stock_name(contextInfo, code)
 	# log(f'position_callback(): {code} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
 	# 检查持仓变化并记录
-	log(f'position_callback(): 持仓更新 - 股票: {code} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}')
+	log(f'position_callback(): 持仓更新 - 股票: {code} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}, m_nDirection={positionInfo.m_nDirection}')
 	# 可以在这里添加逻辑，如检查持仓是否为0，触发卖出信号等
 	# if positionInfo.m_nVolume == 0:
 	# 	log(f'position_callback(): 持仓清空 - 股票: {code} {name}')
@@ -844,6 +848,13 @@ def db_update_buy_date(code, buy_date):
 	conn.commit()
 	conn.close()
 	
+def db_update_buy_price(code, buy_price):
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('UPDATE stock_status SET buy_price = ? WHERE code = ?', (buy_price, code))
+	conn.commit()
+	conn.close()
+
 def db_update_sell_status(code, sell_status):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
@@ -855,6 +866,13 @@ def db_update_sell_date(code, sell_date):
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
 	cursor.execute('UPDATE stock_status SET sell_date = ? WHERE code = ?', (sell_date, code))
+	conn.commit()
+	conn.close()
+	
+def db_update_sell_price(code, sell_price):
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	cursor = conn.cursor()
+	cursor.execute('UPDATE stock_status SET sell_price = ? WHERE code = ?', (sell_price, code))
 	conn.commit()
 	conn.close()
 	
