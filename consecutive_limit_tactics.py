@@ -161,7 +161,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251205'
+	T.TARGET_DATE = '20251209'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
@@ -298,7 +298,7 @@ def trade_on_handle_bar(contextInfo):
 				if bar_time != '20251203130000':
 					log(f'trade_on_handle_bar(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的{bar_time}分钟线数据!')
 				continue
-			current = market_data_last_price[code]['close'][0]
+			current = market_data_last_price[code]['high'][0]
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = market_data_last_price[code]['lastPrice'][0]
@@ -392,10 +392,6 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
 		continue
 
-	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
-		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
-		log(f'T.codes_all=\n{df.to_string()}')
-		T.last_codes_all = copy.deepcopy(T.codes_all)
 	# 卖出股票
 	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CURRENT_ABOVE_UPPER'])
 	if sell_count != 0:
@@ -438,6 +434,11 @@ def trade_on_handle_bar(contextInfo):
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])
 				continue
+
+	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
+		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+		log(f'T.codes_all=\n{df.to_string()}')
+		T.last_codes_all = copy.deepcopy(T.codes_all)
 
 def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
 	# 使用 lateral_high_date 获取lateral_high价格
@@ -752,7 +753,7 @@ def get_stock_name(contextInfo, code):
 		return "get_stock_name(): Error! 未知"
 
 def log(*args):
-	message = '\t' + ''.join(str(arg) for arg in args) + '\n'
+	message = ''.join(str(arg) for arg in args) + '\n'
 	file_path = 'C:/a/trade/量化/中信证券/code/' + 'QMT ' + T.CURRENT_DATE + ' log.txt'
 	with open(file_path, 'a', encoding='utf-8') as f:
 		f.write(message)
