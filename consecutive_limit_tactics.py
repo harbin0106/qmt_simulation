@@ -161,7 +161,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:00'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251203'
+	T.TARGET_DATE = '20251205'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
@@ -298,7 +298,7 @@ def trade_on_handle_bar(contextInfo):
 				if bar_time != '20251203130000':
 					log(f'trade_on_handle_bar(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的{bar_time}分钟线数据!')
 				continue
-			current = market_data_last_price[code]['high'][0]
+			current = market_data_last_price[code]['close'][0]
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = market_data_last_price[code]['lastPrice'][0]
@@ -405,16 +405,16 @@ def trade_on_handle_bar(contextInfo):
 			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
 				log(f'sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
 				db_update_sell_date(code, T.codes_all[code]['sell_date'])
 				db_update_sell_status(code, T.codes_all[code]['sell_status'])				
-				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
 				continue
 			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
 				log(f'sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
 				db_update_sell_date(code, T.codes_all[code]['sell_date'])
 				db_update_sell_status(code, T.codes_all[code]['sell_status'])				
-				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
 				continue
 	# 买入股票
 	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'])
@@ -427,16 +427,16 @@ def trade_on_handle_bar(contextInfo):
 			if current_time >= T.TRANSACTION_CLOSE_TIME and T.codes_all[code]['buy_status'] == 'BUY_AT_AMOUNT':
 				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
+				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])				
-				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				continue
 			if T.codes_all[code]['buy_status'] == 'BUY_AT_BREAKOUT':
-				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}')
+				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
+				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])
-				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				continue
 
 def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
