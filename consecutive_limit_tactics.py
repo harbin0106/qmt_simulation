@@ -109,6 +109,8 @@ def init_load_recommendations_from_db(contextInfo):
 	df_filtered = df_all[df_all['effective'] == 'Y']
 	for df in df_filtered.itertuples():
 		T.codes_recommended[df.code] = {}
+		if df.name != get_stock_name(contextInfo, df.code):
+			log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
 		T.codes_recommended[df.code]['name'] = df.name
 		T.codes_recommended[df.code]['recommend_date'] = df.recommend_date
 		T.codes_recommended[df.code]['lateral_high_date'] = df.lateral_high_date
@@ -159,9 +161,9 @@ def init_trade_parameters(contextInfo):
 	T.SLOPE = np.log(1.07)
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
-	T.CHECK_CLOSE_PRICE_TIME = '14:56:00'
+	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251209'
+	T.TARGET_DATE = '20251203'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
@@ -201,7 +203,7 @@ def on_timer(contextInfo):
 			recommend_date = T.codes_recommended[code]['recommend_date']
 			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommend_date)
 			if to_buy and T.codes_recommended[code]['buy_status'] == '':
-				log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, current_time={current_time}, last_price={last_price:.2f}, recommend_date={recommend_date}, to_buy={to_buy}')
+				log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, current_time={current_time}, last_price={last_price:.2f}, recommend_date={recommend_date}, to_buy={to_buy}')
 				T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
 				db_update_buy_status(code, T.codes_recommended[code]['buy_status'])
 
@@ -217,7 +219,7 @@ def on_timer(contextInfo):
 		for code in list(set(T.codes_recommended.keys())):
 			if T.codes_recommended[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
 				continue
-			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {get_stock_name(contextInfo, code)}, buying at amount {amount_of_each_stock:.2f}元')
+			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, buying at amount {amount_of_each_stock:.2f}元')
 			trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
 			T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
 			db_update_buy_status(code, T.codes_recommended[code]['buy_status'])
@@ -296,7 +298,7 @@ def trade_on_handle_bar(contextInfo):
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
 			if market_data_last_price[code].empty:
 				if bar_time != '20251203130000':
-					log(f'trade_on_handle_bar(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的{bar_time}分钟线数据!')
+					log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
 			current = market_data_last_price[code]['high'][0]
 		else:
@@ -305,12 +307,12 @@ def trade_on_handle_bar(contextInfo):
 			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
 		lateral_high_date = T.codes_all[code]['lateral_high_date']
 		if lateral_high_date is None:
-			log(f'trade_on_handle_bar(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的lateral_high_date {lateral_high_date}!')
+			log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的lateral_high_date {lateral_high_date}!')
 			continue
 		# 使用 lateral_high_date 获取lateral_high价格
 		market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 		if market_data_lateral_high[code].empty:
-			log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
+			log(f'trade_is_to_buy(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
 			continue
 		lateral_high = market_data_lateral_high[code]['high'][0]
 		# 获取120日的成交额
@@ -335,43 +337,43 @@ def trade_on_handle_bar(contextInfo):
 		closes_ma5_derivative = closes_ma5.diff(1).dropna()
 		ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
 		if len(ma5_derivative_normalized) == 0:
-			log(f'trade_is_to_buy(): Error! {code} {get_stock_name(contextInfo, code)} 的len(ma5_derivative_normalized) == 0!')
+			log(f'trade_is_to_buy(): Error! {code} {T.codes_all[code]["name"]} 的len(ma5_derivative_normalized) == 0!')
 			continue
 		if T.codes_all[code]['buy_date'] is not None and T.codes_all[code]['buy_date'] != T.CURRENT_DATE:
 			support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
 		else:
 			support, upper = 0, 0
-		log(f'{code} {get_stock_name(contextInfo, code)}, lateral_high={lateral_high:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, opens[-1]={opens[-1]:.2f}, current={current:.2f}, up_stop_price={up_stop_price:.2f}, avg_amount_120={avg_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, support={support:.2f}, upper={upper:.2f}')
+		log(f'{code} {T.codes_all[code]["name"]}, lateral_high={lateral_high:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, opens[-1]={opens[-1]:.2f}, current={current:.2f}, up_stop_price={up_stop_price:.2f}, avg_amount_120={avg_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, support={support:.2f}, upper={upper:.2f}')
 		
 		# 买入: buy_date为None, 只要超过lateral_high就买入
 		if T.codes_all[code]['buy_date'] is None and current >= lateral_high and (lows[-2] <= lateral_high * 0.97 or (abs(lows[-2] - lateral_high) < 0.01 * lateral_high and abs(lows[-3] - lateral_high) < 0.01 * lateral_high)):
 			T.codes_all[code]['buy_date'] = T.CURRENT_DATE
 			T.codes_all[code]['buy_status'] = 'BUY_AT_BREAKOUT'
-			log(f'BUY_AT_BREAKOUT: {code} {get_stock_name(contextInfo, code)}')
+			log(f'BUY_AT_BREAKOUT: {code} {T.codes_all[code]["name"]}')
 			continue
 		# 买入: buy_date为None, 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
 		if T.codes_all[code]['buy_date'] is None and current_time > T.CHECK_CLOSE_PRICE_TIME and current > lateral_high and amount_ratios[-2] < 0.25 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
 			T.codes_all[code]['buy_date'] = T.CURRENT_DATE
 			T.codes_all[code]['buy_status'] = 'BUY_AT_AMOUNT'
-			log(f'BUY_AT_AMOUNT: {code} {get_stock_name(contextInfo, code)}')
+			log(f'BUY_AT_AMOUNT: {code} {T.codes_all[code]["name"]}')
 		# 卖出, 必须有买入日期且买入日期不是今天
 		if T.codes_all[code]['buy_date'] is None or T.codes_all[code]['buy_date'] == T.CURRENT_DATE or T.codes_all[code]['sell_date'] is not None:
 			continue
 		# 卖出: 收盘成交量大于10倍120日均量, 立即卖出
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and amounts[-1] >= 10 * avg_amount_120:
-			log(f'SELL_AT_HIGH_AMOUNT: {code} {get_stock_name(contextInfo, code)}')
+			log(f'SELL_AT_HIGH_AMOUNT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_HIGH_AMOUNT'
 			continue
 		# 卖出: 收盘价跌破水平突破线时刻
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current <= lateral_high:
-			log(f'SELL_AT_CLOSE_BELOW_BREAKOUT: {code} {get_stock_name(contextInfo, code)}')
+			log(f'SELL_AT_CLOSE_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_BREAKOUT'
 			continue
 		# 卖出: 开盘价跌破水平支撑线时刻
 		if opens[-1] <= lateral_high:
-			log(f'SELL_AT_OPEN_BELOW_BREAKOUT: {code} {get_stock_name(contextInfo, code)}')
+			log(f'SELL_AT_OPEN_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_BREAKOUT'
 			continue
@@ -381,13 +383,13 @@ def trade_on_handle_bar(contextInfo):
 			if opens[-1] < closes[-2] * 0.99 and rates[-2] > 9 and rates[-3] > 9 and rates[-4] > 9:
 				log(f'trade_on_handle_bar(): no SELL_AT_CLOSE_BELOW_SUPPORT due to opens[-1] < closes[-2] * 0.99 and rates[-2] > 9 and rates[-3] > 9 and rates[-4] > 9!')
 				continue
-			log(f'SELL_AT_CLOSE_BELOW_SUPPORT: {code} {get_stock_name(contextInfo, code)}')
+			log(f'SELL_AT_CLOSE_BELOW_SUPPORT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
 			continue
 		# 卖出: 收盘突破上轨的时刻
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current >= upper:
-			log(f'SELL_AT_CURRENT_ABOVE_UPPER: {code} {get_stock_name(contextInfo, code)}')
+			log(f'SELL_AT_CURRENT_ABOVE_UPPER: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
 		continue
@@ -444,17 +446,17 @@ def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
 	# 使用 lateral_high_date 获取lateral_high价格
 	market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 	if market_data_lateral_high[code].empty:
-		log(f'trade_is_to_buy(): Error! 未获取到{code} {get_stock_name(contextInfo, code)} 的推荐日{lateral_high_date}收盘价数据!')
+		log(f'trade_is_to_buy(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
 		return False
 	lateral_high = market_data_lateral_high[code]['high'][0]
 	# 判断条件：当前价格高于推荐日的最高价
 	result = current >= lateral_high
-	# log(f'trade_is_to_buy(): {code} {get_stock_name(contextInfo, code)}, current={current:.2f}, lateral_high={lateral_high:.2f}, result={result}')
+	# log(f'trade_is_to_buy(): {code} {T.codes_all[code]["name"]}, current={current:.2f}, lateral_high={lateral_high:.2f}, result={result}')
 	return result
 
 def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251127'):
 	if buy_date is None:
-		log(f'trade_get_support_upper_price(): Error! buy_date is None for {code} {get_stock_name(contextInfo, code)}!')
+		log(f'trade_get_support_upper_price(): Error! buy_date is None for {code} {T.codes_all[code]["name"]}!')
 		return 0, 0
 	# 一次性获取该股票从buy_date前推7日到当前交易日的所有数据
 	start_date = (datetime.strptime(buy_date, '%Y%m%d') - timedelta(days=7)).strftime('%Y%m%d')
@@ -471,7 +473,7 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	rates = df['close'].pct_change().values * 100
 	# 找到buy_date的索引
 	if buy_date not in dates:
-		log(f'trade_get_support_upper_price(): Error! buy_date {buy_date} 不在数据中{dates} for {code} {get_stock_name(contextInfo, code)}!')
+		log(f'trade_get_support_upper_price(): Error! buy_date {buy_date} 不在数据中{dates} for {code} {T.codes_all[code]["name"]}!')
 		return 0, 0
 	buy_date_index = dates.index(buy_date)
 
@@ -486,9 +488,9 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	for i in range(buy_date_index + 1, len(dates) - 1):
 		if closes[i] <= support and opens[i] < closes[i-1] * 0.99 and rates[i-1] > 9 and rates[i-2] > 9 and rates[i-3] > 9:
 			new_buy_date = dates[i]  # 检查到后, 再把索引转换成日期
-			log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, buy_date updated from {buy_date} to {new_buy_date} due to closes[i]={closes[i]:.2f}, support={support:.2f}, upper={upper:.2f}, opens[i]={opens[i]:.2f}, closes[i-1]={closes[i-1]:.2f}, rates[i-1]={rates[i-1]:.2f}, rates[{i-2}]={rates[i-2]:.2f}, rates[{i-3}]={rates[i-3]:.2f}')
+			log(f'trade_get_support_upper_price(): {code} {T.codes_all[code]["name"]}, buy_date updated from {buy_date} to {new_buy_date} due to closes[i]={closes[i]:.2f}, support={support:.2f}, upper={upper:.2f}, opens[i]={opens[i]:.2f}, closes[i-1]={closes[i-1]:.2f}, rates[i-1]={rates[i-1]:.2f}, rates[{i-2}]={rates[i-2]:.2f}, rates[{i-3}]={rates[i-3]:.2f}')
 			if new_buy_date == T.CURRENT_DATE:
-				log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)} Error! new_buy_date == T.CURRENT_DATE! Invalid support and upper values!')
+				log(f'trade_get_support_upper_price(): {code} {T.codes_all[code]["name"]} Error! new_buy_date == T.CURRENT_DATE! Invalid support and upper values!')
 				return 0, 0
 			ref_point = (df.loc[new_buy_date, 'high'] + df.loc[new_buy_date, 'low'] + df.loc[new_buy_date, 'open'] + df.loc[new_buy_date, 'close']) / 4
 			# 计算从buy_date到current_date的交易日天数，不包括停牌日期
@@ -496,7 +498,7 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 			support = np.exp(T.SLOPE * (len(trading_dates) - 1) + np.log(ref_point * 0.96))
 			upper = np.exp(T.SLOPE * (len(trading_dates) - 1) + np.log(ref_point * 1.13))
 			continue
-	# log(f'trade_get_support_upper_price(): {code} {get_stock_name(contextInfo, code)}, trading_days_count={trading_days_count}, buy_date={buy_date}, T.CURRENT_DATE={T.CURRENT_DATE}, np.exp(y_log_support)={np.exp(y_log_support):.2f}, np.exp(y_log_upper)={np.exp(y_log_upper):.2f}')
+	# log(f'trade_get_support_upper_price(): {code} {T.codes_all[code]["name"]}, trading_days_count={trading_days_count}, buy_date={buy_date}, T.CURRENT_DATE={T.CURRENT_DATE}, np.exp(y_log_support)={np.exp(y_log_support):.2f}, np.exp(y_log_upper)={np.exp(y_log_upper):.2f}')
 	return support, upper
 
 def trade_query_info(contextInfo):
@@ -537,19 +539,19 @@ def trade_sell_stock(contextInfo, code, comment):
 	for dt in positions:
 		if f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}" != code:
 			continue
-		log(f'trade_sell_stock():  {code} {get_stock_name(contextInfo, code)}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+		log(f'trade_sell_stock():  {code} {T.codes_all[code]["name"]}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
 		volume = dt.m_nCanUseVolume  # 可卖数量
 		break
 	if volume == 0:
-		log(f'trade_sell_stock(): {code} {get_stock_name(contextInfo, code)}, {comment}, Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
+		log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
 		return
 	volume = 100  # 测试时先卖100股
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_sell_stock(): {code} {get_stock_name(contextInfo, code)}, {comment}, 卖出 {volume} 股 (测试时先卖100股)')
+	log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, 卖出 {volume} 股 (测试时先卖100股)')
 
 def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, comment):
-	# log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
+	# log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {T.codes_all[code]["name"]}, buy_amount={buy_amount:.2f}元')
 	# 获取涨停价
 	instrument_detail = contextInfo.get_instrument_detail(code)
 	up_stop_price = instrument_detail.get('UpStopPrice')
@@ -576,10 +578,10 @@ def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, co
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.2f}元')
+	log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {T.codes_all[code]["name"]} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.2f}元')
 
 def trade_buy_stock_at_up_stop_price_by_volume(contextInfo, code, volume, comment):
-	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {get_stock_name(contextInfo, code)}, volume={volume} 股')
+	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {T.codes_all[code]["name"]}, volume={volume} 股')
 	# 检查volume是否为100的倍数
 	if volume % 100 != 0 or volume < 100:
 		log(f'trade_buy_stock_at_up_stop_price_by_volume(): Error! 买入股数{volume} 不是100的倍数或小于100股，跳过!')
@@ -609,10 +611,10 @@ def trade_buy_stock_at_up_stop_price_by_volume(contextInfo, code, volume, commen
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {get_stock_name(contextInfo, code)} 以涨停价{up_stop_price:.2f}买入 {volume} 股，预计成交金额 {buy_amount:.2f} 元')
+	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {T.codes_all[code]["name"]} 以涨停价{up_stop_price:.2f}买入 {volume} 股，预计成交金额 {buy_amount:.2f} 元')
 
 def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
-	log(f'trade_buy_stock_by_amount(): {code} {get_stock_name(contextInfo, code)}, buy_amount={buy_amount:.2f}元')
+	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]}, buy_amount={buy_amount:.2f}元')
 	# 查询当前账户资金余额
 	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
 	if len(account) == 0:
@@ -633,7 +635,7 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 	# 获取当前最新股价
 	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 	if code not in market_data or market_data[code].empty:
-		log(f'trade_buy_stock_by_amount(): Error! 无法获取{code} {get_stock_name(contextInfo, code)}的最新股价!')
+		log(f'trade_buy_stock_by_amount(): Error! 无法获取{code} {T.codes_all[code]["name"]}的最新股价!')
 		return
 	last_price = market_data[code]['lastPrice'][0]
 	log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
@@ -649,10 +651,10 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 
 	# 使用passorder进行市价买入
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_latest, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_by_amount(): {code} {get_stock_name(contextInfo, code)} 市价买入金额 {buy_amount:.2f}元')
+	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 市价买入金额 {buy_amount:.2f}元')
 
 def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
-	log(f'trade_buy_stock_by_volume(): {code} {get_stock_name(contextInfo, code)}, volume={volume} 股')
+	log(f'trade_buy_stock_by_volume(): {code} {T.codes_all[code]["name"]}, volume={volume} 股')
 	# 检查volume是否为100的倍数
 	if volume % 100 != 0 or volume < 100:
 		log(f'trade_buy_stock_by_volume(): Error! 买入股数{volume} 不是100的倍数或小于100股，跳过!')
@@ -668,7 +670,7 @@ def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
 	# 获取当前最新股价
 	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 	if code not in market_data or market_data[code].empty:
-		log(f'trade_buy_stock_by_volume(): Error! 无法获取{code} {get_stock_name(contextInfo, code)}的最新股价!')
+		log(f'trade_buy_stock_by_volume(): Error! 无法获取{code} {T.codes_all[code]["name"]}的最新股价!')
 		return
 	last_price = market_data[code]['lastPrice'][0]
 	log(f'trade_buy_stock_by_volume(): 当前最新股价: {last_price:.2f}')
@@ -686,7 +688,7 @@ def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
 
 	# 使用passorder进行市价买入，按股数
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_latest, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_by_volume(): {code} {get_stock_name(contextInfo, code)} 市价买入 {volume} 股，预计成交金额 {trade_amount:.2f} 元')
+	log(f'trade_buy_stock_by_volume(): {code} {T.codes_all[code]["name"]} 市价买入 {volume} 股，预计成交金额 {trade_amount:.2f} 元')
 
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
@@ -696,7 +698,7 @@ def account_callback(contextInfo, accountInfo):
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
 	code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
-	name = get_stock_name(contextInfo, code)
+	name = T.codes_all[code]["name"]
 	# log(f'order_callback(): {code} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
@@ -716,7 +718,7 @@ def order_callback(contextInfo, orderInfo):
 # 成交主推函数
 def deal_callback(contextInfo, dealInfo):
 	code = f"{dealInfo.m_strInstrumentID}.{dealInfo.m_strExchangeID}"
-	name = get_stock_name(contextInfo, code)
+	name = T.codes_all[code]["name"]
 	# log(f'deal_callback(): {code} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
 	# 检查成交结果并记录
 	# log(f'deal_callback(): 成交确认 - 股票: {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
@@ -730,7 +732,7 @@ def deal_callback(contextInfo, dealInfo):
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
 	code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
-	name = get_stock_name(contextInfo, code)
+	name = T.codes_all[code]["name"]
 	# log(f'position_callback(): {code} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
 	# 检查持仓变化并记录
 	log(f'position_callback(): 持仓更新 - 股票: {code} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}, m_nDirection={positionInfo.m_nDirection}')
@@ -741,7 +743,7 @@ def position_callback(contextInfo, positionInfo):
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
 	code = f"{passOrderInfo.orderCode}"
-	name = get_stock_name(contextInfo, code)
+	name = T.codes_all[code]["name"]
 	log(f'\norderError_callback(): 下单错误 - 股票: {code} {name}, 错误信息: {msg}')
 	# 可以在这里添加逻辑，如重试下单或发送警报
 
