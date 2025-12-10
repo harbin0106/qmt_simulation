@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 import sqlite3
 import time
 import os
+import copy
 # Global trade variables
 class T():
 	pass
@@ -162,6 +163,7 @@ def init_trade_parameters(contextInfo):
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
 	T.TARGET_DATE = '20251203'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
+	T.last_codes_all = None
 
 def open_log_file(contextInfo):
 	# 打开日志文件
@@ -228,8 +230,8 @@ def after_init(contextInfo):
 	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
 	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
 	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
-	df = pd.DataFrame.from_dict(T.codes_all, orient='index')
-	log(f'after_init(): T.codes_all=\n{df.to_string()}')
+	# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+	# log(f'after_init(): T.codes_all=\n{df.to_string()}')
 	open_log_file(contextInfo)
 
 def handlebar(contextInfo):
@@ -387,21 +389,25 @@ def trade_on_handle_bar(contextInfo):
 				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 				T.codes_all[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
 			continue
+	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
+		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+		log(f'trade_on_handle_bar(): T.codes_all=\n{df.to_string()}')
+		T.last_codes_all = copy.deepcopy(T.codes_all)
 	# 卖出股票
 	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CURRENT_ABOVE_UPPER'])
 	if sell_count != 0:
-		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
-		log(f'trade_on_handle_bar(): sell_count={sell_count}, T.codes_all=\n{df.to_string()}')
 		for code in list(set(T.codes_all.keys())):
 			if  T.codes_all[code]['sell_status'] is None:
 				continue
 			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
+				log(f'trade_on_handle_bar(): sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
 				db_update_sell_date(code, T.codes_all[code]['sell_date'])
 				db_update_sell_status(code, T.codes_all[code]['sell_status'])				
 				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
 				continue
 			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
+				log(f'trade_on_handle_bar(): sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
 				db_update_sell_date(code, T.codes_all[code]['sell_date'])
 				db_update_sell_status(code, T.codes_all[code]['sell_status'])				
@@ -412,18 +418,18 @@ def trade_on_handle_bar(contextInfo):
 	if buy_count != 0:
 		if T.BUY_AMOUNT is None:
 			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 3
-		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
-		log(f'trade_on_handle_bar(): buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}, T.codes_all=\n{df.to_string()}')
 		for code in list(set(T.codes_all.keys())):
 			if  T.codes_all[code]['buy_status'] is None:
 				continue
 			if current_time >= T.TRANSACTION_CLOSE_TIME and T.codes_all[code]['buy_status'] == 'BUY_AT_AMOUNT':
+				log(f'trade_on_handle_bar(): buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])				
 				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '_DONE'
 				continue
 			if T.codes_all[code]['buy_status'] == 'BUY_AT_BREAKOUT':
+				log(f'trade_on_handle_bar(): buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])
