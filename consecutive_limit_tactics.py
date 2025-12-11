@@ -163,7 +163,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251202'
+	T.TARGET_DATE = '20251209'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
@@ -358,8 +358,8 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['buy_status'] = 'BUY_AT_AMOUNT'
 			T.codes_all[code]['buy_price'] = current
 			log(f'BUY_AT_AMOUNT: {code} {T.codes_all[code]["name"]}')
-		# 卖出, 必须有买入日期且买入日期不是今天
-		if T.codes_all[code]['buy_date'] is None or T.codes_all[code]['buy_date'] == T.CURRENT_DATE or T.codes_all[code]['sell_date'] is not None:
+		# 卖出, 必须有买入日期且买入日期早于今天
+		if T.codes_all[code]['buy_date'] is None or T.codes_all[code]['buy_date'] >= T.CURRENT_DATE or T.codes_all[code]['sell_date'] is not None:
 			continue
 		# 卖出: 收盘成交量大于10倍120日均量, 立即卖出
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and amounts[-1] >= 10 * avg_amount_120:
