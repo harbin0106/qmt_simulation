@@ -390,7 +390,7 @@ def trade_on_handle_bar(contextInfo):
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current >= upper:
 			log(f'SELL_AT_CURRENT_ABOVE_UPPER: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
-			T.codes_all[code]['sell_status'] = 'SELL_AT_CURRENT_ABOVE_UPPER'
+			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_ABOVE_UPPER'
 		continue
 
 	# 卖出股票
