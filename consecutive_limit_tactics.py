@@ -110,7 +110,7 @@ def init_load_recommendations_from_db(contextInfo):
 	for df in df_filtered.itertuples():
 		T.codes_recommended[df.code] = {}
 		if df.name != get_stock_name(contextInfo, df.code):
-			log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
+			log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
 		T.codes_recommended[df.code]['name'] = df.name
 		T.codes_recommended[df.code]['recommend_date'] = df.recommend_date
 		T.codes_recommended[df.code]['lateral_high_date'] = df.lateral_high_date
@@ -163,7 +163,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251208'
+	T.TARGET_DATE = '20251201'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
