@@ -163,7 +163,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251201'
+	T.TARGET_DATE = '20251202'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
@@ -394,14 +394,14 @@ def trade_on_handle_bar(contextInfo):
 			continue
 		# 卖出: 收盘突破上轨的时刻
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current >= upper:
-			log(f'SELL_AT_CURRENT_ABOVE_UPPER: {code} {T.codes_all[code]["name"]}')
+			log(f'SELL_AT_CLOSE_ABOVE_UPPER: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_ABOVE_UPPER'
 			T.codes_all[code]['sell_price'] = current
 		continue
 
 	# 卖出股票
-	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CURRENT_ABOVE_UPPER'])
+	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CLOSE_ABOVE_UPPER'])
 	if sell_count != 0:
 		for code in list(set(T.codes_all.keys())):
 			if  T.codes_all[code]['sell_status'] is None:
@@ -414,7 +414,7 @@ def trade_on_handle_bar(contextInfo):
 				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				db_update_sell_price(code, T.codes_all[code]['sell_price'])				
 				continue
-			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CURRENT_ABOVE_UPPER':
+			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_ABOVE_UPPER':
 				log(f'sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
 				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '_DONE'
