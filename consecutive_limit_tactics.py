@@ -163,7 +163,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251203'
+	T.TARGET_DATE = '20251208'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
@@ -297,8 +297,7 @@ def trade_on_handle_bar(contextInfo):
 			market_data_last_price = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
 			if market_data_last_price[code].empty:
-				if bar_time != '20251203130000':
-					log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
+				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
 			current = market_data_last_price[code]['high'][0]
 		else:
@@ -343,7 +342,7 @@ def trade_on_handle_bar(contextInfo):
 			support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
 		else:
 			support, upper = 0, 0
-		log(f'{code} {T.codes_all[code]["name"]}, lateral_high={lateral_high:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, opens[-1]={opens[-1]:.2f}, current={current:.2f}, up_stop_price={up_stop_price:.2f}, avg_amount_120={avg_amount_120:.0f}, amounts[-1]={amounts[-1]:.0f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.4f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, support={support:.2f}, upper={upper:.2f}')
+		log(f'{code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.0f}, avg_amount_120={avg_amount_120:.0f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 		
 		# 买入: buy_date为None, 只要超过lateral_high就买入
 		if T.codes_all[code]['buy_date'] is None and current >= lateral_high and (lows[-2] <= lateral_high * 0.97 or (abs(lows[-2] - lateral_high) < 0.01 * lateral_high and abs(lows[-3] - lateral_high) < 0.01 * lateral_high)):
