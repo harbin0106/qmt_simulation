@@ -165,7 +165,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251212'
+	T.TARGET_DATE = '20251211'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -238,7 +238,18 @@ def after_init(contextInfo):
 	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
 	# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
 	# log(f'after_init(): T.codes_all=\n{df.to_string()}')
+	# 计算lateral_high_date是否正确
+	trade_get_lateral_high_date(contextInfo)	
 	open_log_file(contextInfo)
+
+def trade_get_lateral_high_date(contextInfo):
+	start_date = '20240418'
+	for code in list(set(T.codes_all.keys())):
+		market_data = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=start_date, end_time=T.codes_all[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
+		highs = market_data[code]['high'].astype(float)
+		lateral_high_date = highs.idxmax()
+		if T.codes_all[code]['lateral_high_date'] != lateral_high_date:
+			log(f'trade_get_lateral_high_date(): code={code}, name={T.codes_all[code]["name"]}. Invalid lateral_high_date! lateral_high_date={lateral_high_date}, db={T.codes_all[code]["lateral_high_date"]}')
 
 def handlebar(contextInfo):
 	if T.download_mode:
