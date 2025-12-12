@@ -239,17 +239,30 @@ def after_init(contextInfo):
 	# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
 	# log(f'after_init(): T.codes_all=\n{df.to_string()}')
 	# 计算lateral_high_date是否正确
-	trade_get_lateral_high_date(contextInfo)	
+	trade_refine_codes_all(contextInfo)	
 	open_log_file(contextInfo)
 
-def trade_get_lateral_high_date(contextInfo):
+def trade_refine_codes_all(contextInfo):
 	start_date = '20240418'
+	filtered_codes_all = {}
 	for code in list(set(T.codes_all.keys())):
-		market_data = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=start_date, end_time=T.codes_all[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
+		market_data = contextInfo.get_market_data_ex(['high', 'close'], [code], period='1d', start_time=start_date, end_time=T.codes_all[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
 		highs = market_data[code]['high'].astype(float)
+		closes= market_data[code]['close'].astype(float)
 		lateral_high_date = highs.idxmax()
+		lateral_high = max(highs)
 		if T.codes_all[code]['lateral_high_date'] != lateral_high_date:
-			log(f'trade_get_lateral_high_date(): code={code}, name={T.codes_all[code]["name"]}. Invalid lateral_high_date! lateral_high_date={lateral_high_date}, db={T.codes_all[code]["lateral_high_date"]}')
+			log(f'trade_refine_codes_all(): code={code}, name={T.codes_all[code]["name"]}. Error! Invalid lateral_high_date! lateral_high_date={lateral_high_date}, db={T.codes_all[code]["lateral_high_date"]}')
+			continue
+		# 过滤掉还没有接近水平突破线的股票
+		if closes[-1] < lateral_high * 0.9:
+			continue
+		# log(f'trade_refine_codes_all(): code={code}, name={T.codes_all[code]["name"]}, lateral_high={lateral_high:.2f}, closes[-1]={closes[-1]}')
+		filtered_codes_all[code] = T.codes_all[code]
+
+	T.codes_all = filtered_codes_all
+	log(f'trade_refine_codes_all(): Filtered T.codes_all to {len(T.codes_all)} stocks that meet the condition.')
+
 
 def handlebar(contextInfo):
 	if T.download_mode:
