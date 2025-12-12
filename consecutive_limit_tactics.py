@@ -503,7 +503,7 @@ def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251
 	return support, upper
 
 def trade_query_info(contextInfo):
-	N_days_ago = T.CURRENT_DATE - timedelta(days=7)
+	N_days_ago = datetime.strptime(T.CURRENT_DATE, '%Y%m%d').date() - timedelta(days=7)
 	orders = get_trade_detail_data(T.accountid, 'stock', 'order')
 	log("trade_query_info(): 最近7天的委托记录:")
 	for o in orders:
@@ -651,7 +651,7 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 		return
 
 	# 使用passorder进行市价买入
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_latest, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
+	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 市价买入金额 {buy_amount:.2f}元')
 
 def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
