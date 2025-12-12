@@ -122,6 +122,9 @@ def init_load_recommendations_from_db(contextInfo):
 		T.codes_recommended[df.code]['effective'] = df.effective
 		T.codes_recommended[df.code]['buy_status'] = df.buy_status
 		T.codes_recommended[df.code]['sell_status'] = df.sell_status
+		T.codes_recommended[df.code]['lateral_high'] = None
+		T.codes_recommended[df.code]['support'] = None
+		T.codes_recommended[df.code]['upper'] = None
 	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
@@ -239,8 +242,14 @@ def after_init(contextInfo):
 	# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
 	# log(f'after_init(): T.codes_all=\n{df.to_string()}')
 	# 计算lateral_high_date是否正确
-	trade_refine_codes_all(contextInfo)	
+	trade_refine_codes_all(contextInfo)
+	# trade_get_recommendations(contextInfo)
 	open_log_file(contextInfo)
+
+# def trade_get_recommendations(contextInfo):
+# 	query = f"2025年12月1日 百日新高 主板股票 非ST股票 股价小于15元"
+# 	df = pywencai.get(query=query, query_type='stock', sort_order='desc', loop=True)
+# 	log(f'df=\n{df}')
 
 def trade_refine_codes_all(contextInfo):
 	start_date = '20240418'
@@ -325,7 +334,7 @@ def trade_on_handle_bar(contextInfo):
 		up_stop_price = 0
 		if T.TARGET_DATE != '':
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
-			market_data_last_price = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_last_price = contextInfo.get_market_data_ex(['high'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
@@ -335,16 +344,20 @@ def trade_on_handle_bar(contextInfo):
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = market_data_last_price[code]['lastPrice'][0]
 			up_stop_price = contextInfo.get_instrument_detail(code).get('UpStopPrice')
-		lateral_high_date = T.codes_all[code]['lateral_high_date']
-		if lateral_high_date is None:
-			log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的lateral_high_date {lateral_high_date}!')
-			continue
-		# 使用 lateral_high_date 获取lateral_high价格
-		market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data_lateral_high[code].empty:
-			log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
-			continue
-		lateral_high = market_data_lateral_high[code]['high'][0]
+		if T.codes_all[code]['lateral_high'] is None:
+			lateral_high_date = T.codes_all[code]['lateral_high_date']
+			if lateral_high_date is None:
+				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的lateral_high_date {lateral_high_date}!')
+				continue
+			# 使用 lateral_high_date 获取lateral_high价格
+			market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+			if market_data_lateral_high[code].empty:
+				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
+				continue
+			lateral_high = market_data_lateral_high[code]['high'][0]
+			T.codes_all[code]['lateral_high'] = lateral_high
+		else:
+			lateral_high = T.codes_all[code]['lateral_high']
 		# 获取120日的成交额
 		market_data_120 = contextInfo.get_market_data_ex(['amount', 'close', 'low', 'open'], [code], period='1d', end_time=T.CURRENT_DATE, count=120, dividend_type='front', fill_data=False, subscribe=True)
 		# 转换成单位亿
@@ -370,10 +383,17 @@ def trade_on_handle_bar(contextInfo):
 		if len(ma5_derivative_normalized) == 0:
 			log(f'trade_on_handle_bar(): Error! {code} {T.codes_all[code]["name"]} 的len(ma5_derivative_normalized) == 0!')
 			continue
-		if T.codes_all[code]['buy_date'] is not None and T.codes_all[code]['buy_date'] != T.CURRENT_DATE:
-			support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
+		if T.codes_all[code]['support'] is None or T.codes_all[code]['upper'] is None:
+			if T.codes_all[code]['buy_date'] is not None and T.codes_all[code]['buy_date'] != T.CURRENT_DATE:
+				support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
+			else:
+				support, upper = 0, 0
+			T.codes_all[code]['support'] = support
+			T.codes_all[code]['upper'] = upper
 		else:
-			support, upper = 0, 0
+			support = T.codes_all[code]['support']
+			upper = T.codes_all[code]['upper']
+
 		# 每分钟打印一次数据值
 		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3]:
 			T.last_current_time[code] = current_time[:-3]
