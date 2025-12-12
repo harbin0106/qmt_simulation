@@ -26,6 +26,7 @@ def init(contextInfo):
 	T.codes_all = T.codes_recommended
 	contextInfo.set_universe(list(set(T.codes_all.keys())))
 	contextInfo.set_account(T.accountid)
+	return
 	# Start the opening call auction timer
 	today = date.today()
 	# log(f'today={today}')
@@ -163,7 +164,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251209'
+	T.TARGET_DATE = ''
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 
@@ -311,12 +312,13 @@ def trade_on_handle_bar(contextInfo):
 		# 使用 lateral_high_date 获取lateral_high价格
 		market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 		if market_data_lateral_high[code].empty:
-			log(f'trade_is_to_buy(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
+			log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
 			continue
 		lateral_high = market_data_lateral_high[code]['high'][0]
 		# 获取120日的成交额
 		market_data_120 = contextInfo.get_market_data_ex(['amount', 'close', 'low', 'open'], [code], period='1d', end_time=T.CURRENT_DATE, count=120, dividend_type='front', fill_data=False, subscribe=True)
-		amounts = market_data_120[code]['amount']
+		# 转换成单位亿
+		amounts = market_data_120[code]['amount'] / 100000000
 		closes = market_data_120[code]['close']
 		# 获取今日开盘价, 昨日收盘价和昨日最低价
 		lows = market_data_120[code]['low']			
@@ -336,13 +338,13 @@ def trade_on_handle_bar(contextInfo):
 		closes_ma5_derivative = closes_ma5.diff(1).dropna()
 		ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
 		if len(ma5_derivative_normalized) == 0:
-			log(f'trade_is_to_buy(): Error! {code} {T.codes_all[code]["name"]} 的len(ma5_derivative_normalized) == 0!')
+			log(f'trade_on_handle_bar(): Error! {code} {T.codes_all[code]["name"]} 的len(ma5_derivative_normalized) == 0!')
 			continue
 		if T.codes_all[code]['buy_date'] is not None and T.codes_all[code]['buy_date'] != T.CURRENT_DATE:
 			support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
 		else:
 			support, upper = 0, 0
-		log(f'{code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.0f}, avg_amount_120={avg_amount_120:.0f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
+		log(f'{code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 		
 		# 买入: buy_date为None, 只要超过lateral_high就买入
 		rates_result = rates[-2] > 9 and rates[-3] > 9 and lows[-2] <= lateral_high
@@ -452,18 +454,6 @@ def trade_on_handle_bar(contextInfo):
 		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
 		log(f'T.codes_all=\n{df.to_string()}')
 		T.last_codes_all = copy.deepcopy(T.codes_all)
-
-def trade_is_to_buy(contextInfo, code, current, lateral_high_date):
-	# 使用 lateral_high_date 获取lateral_high价格
-	market_data_lateral_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=lateral_high_date, end_time=lateral_high_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
-	if market_data_lateral_high[code].empty:
-		log(f'trade_is_to_buy(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
-		return False
-	lateral_high = market_data_lateral_high[code]['high'][0]
-	# 判断条件：当前价格高于推荐日的最高价
-	result = current >= lateral_high
-	# log(f'trade_is_to_buy(): {code} {T.codes_all[code]["name"]}, current={current:.2f}, lateral_high={lateral_high:.2f}, result={result}')
-	return result
 
 def trade_get_support_upper_price(contextInfo, code='603933.SH', buy_date='20251127'):
 	if buy_date is None:
