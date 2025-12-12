@@ -152,7 +152,8 @@ def init_trade_parameters(contextInfo):
 	T.quickTrade = 2 	
 	T.price_invalid = 0
 	# 佣金
-	T.commission_rate = 0.0001
+	# T.commission_rate = 0.0001
+	T.commission_rate = 0.003
 	T.commission_minimum = 5
 	# 过户
 	T.transfer_fee_rate = 0.00001
@@ -228,9 +229,9 @@ def on_timer(contextInfo):
 def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
-	# trade_query_info(contextInfo)
+	trade_query_info(contextInfo)
 	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
-	# trade_buy_stock_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 3000, 'test trade_buy_stock_by_amount()')
+	# trade_buy_stock_by_amount(contextInfo, '002300.SZ', 10000000, '测试买入1千万')
 	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
 	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
 	# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
@@ -614,24 +615,14 @@ def trade_buy_stock_at_up_stop_price_by_volume(contextInfo, code, volume, commen
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {T.codes_all[code]["name"]} 以涨停价{up_stop_price:.2f}买入 {volume} 股，预计成交金额 {buy_amount:.2f} 元')
 
-def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
-	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]}, buy_amount={buy_amount:.2f}元')
-	# 查询当前账户资金余额
-	account = get_trade_detail_data(T.accountid, T.accountid_type, 'account')
-	if len(account) == 0:
-		log(f'trade_buy_stock_by_amount(): Error! 账号未登录! 请检查!')
-		return
-	available_cash = float(account[0].m_dAvailable)
-	log(f'trade_buy_stock_by_amount(): 当前可用资金: {available_cash:.2f}')
-
+def trade_get_fee(contextInfo, buy_amount):
 	# 计算交易费用
 	commission = max(buy_amount * T.commission_rate, T.commission_minimum)
 	transfer_fee = buy_amount * T.transfer_fee_rate
-	total_cost = buy_amount + commission + transfer_fee
-	# 检查总成本是否超过可用资金
-	if total_cost > available_cash:
-		log(f'trade_buy_stock_by_amount(): Error! 买入金额{buy_amount:.2f} 元 + 佣金{commission:.2f} 元 + 过户费{transfer_fee:.2f} 元 = 总成本{total_cost:.2f} 元超过可用资金{available_cash:.2f} 元，跳过!')
-		return
+	return commission + transfer_fee
+
+def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
+	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]}, buy_amount={buy_amount:.2f}元')
 	#获取当前最新股价, 计算是否能够买入大于100股股票
 	# 获取当前最新股价
 	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
@@ -642,14 +633,21 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 	log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
 	# 计算买入100股的成本
 	min_volume = 100
-	min_cost = min_volume * last_price
-	commission_min = max(min_cost * T.commission_rate, T.commission_minimum)
-	transfer_fee_min = min_cost * T.transfer_fee_rate
-	total_min_cost = min_cost + commission_min + transfer_fee_min
-	if total_min_cost > buy_amount:
-		log(f'trade_buy_stock_by_amount(): Error! 买入金额不足! 买入最少100股需要总成本{total_min_cost:.2f} 元，超过买入金额 {buy_amount:.2f} 元，跳过!')
+	min_amount = min_volume * last_price
+	total_min_amount = min_amount + trade_get_fee(contextInfo, min_amount)
+	if total_min_amount > buy_amount:
+		log(f'trade_buy_stock_by_amount(): Error! 买入金额不足! 买入最少100股需要总成本{total_min_amount:.2f} 元，超过买入金额 {buy_amount:.2f} 元，跳过!')
 		return
-
+	# 检查总成本是否超过可用资金
+	available_cash = trade_get_cash(contextInfo)
+	if total_min_amount > available_cash:
+		log(f'trade_buy_stock_by_amount(): Error! 可用资金不足! 买入最少100股需要总成本{total_min_amount:.2f} 元，超过可用资金 {available_cash:.2f} 元，跳过!')
+		return
+	total_amount = buy_amount + trade_get_fee(contextInfo, buy_amount)
+	if total_amount > available_cash:
+		fee = trade_get_fee(contextInfo, available_cash)
+		buy_amount = available_cash - fee
+		log(f'trade_buy_stock_by_amount(): Warning! 可用资金不足! 按可用资金{buy_amount:.2f}元 + 交易费{fee:.2f} 元买入!')
 	# 使用passorder进行市价买入
 	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_sell_1, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 市价买入金额 {buy_amount:.2f}元')
