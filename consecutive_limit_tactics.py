@@ -149,7 +149,7 @@ def init_trade_parameters(contextInfo):
 	T.prType_designated = 11
 	T.strategyName = 'sleep_dragon'
 	# 0-非立即下单。1-实盘下单（历史K线不起作用）。2-仿真下单，不会等待k线走完再委托。可以在after_init函数、run_time函数注册的回调函数里进行委托 
-	T.quickTrade = 2 	
+	T.quickTrade = 1 	
 	T.price_invalid = 0
 	# 佣金
 	# T.commission_rate = 0.0001
@@ -165,9 +165,11 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = ''
+	T.TARGET_DATE = '20251212'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
+	# 用于过滤log
+	T.last_current_time = {}
 
 def open_log_file(contextInfo):
 	# 打开日志文件
@@ -289,8 +291,11 @@ def trade_on_handle_bar(contextInfo):
 	# log(f'bar_date={bar_date}, T.CURRENT_DATE={T.CURRENT_DATE}')
 	# 获取当前时间: current_time带有前导0
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
-	log(f'\t{current_time}')
+	if not T.last_current_time or T.last_current_time.get('top') != current_time[:-3]:
+		T.last_current_time['top'] = current_time[:-3]
+		log(f'\t{current_time}')
 	# if T.MARKET_OPEN_TIME <= current_time <= T.TRANSACTION_CLOSE_TIME:
+	# 判断买卖条件, 并保存指令状态
 	for code in list(set(T.codes_all.keys())):
 		# 获取当前的最新价格
 		up_stop_price = 0
@@ -345,7 +350,10 @@ def trade_on_handle_bar(contextInfo):
 			support, upper = trade_get_support_upper_price(contextInfo, code, T.codes_all[code]['buy_date'])
 		else:
 			support, upper = 0, 0
-		log(f'{code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
+		# 每分钟打印一次数据值
+		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3]:
+			T.last_current_time[code] = current_time[:-3]
+			log(f'{code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 		
 		# 买入: buy_date为None, 只要超过lateral_high就买入
 		rates_result = rates[-2] > 9 and rates[-3] > 9 and lows[-2] <= lateral_high
@@ -353,37 +361,38 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['buy_date'] = T.CURRENT_DATE
 			T.codes_all[code]['buy_status'] = 'BUY_AT_BREAKOUT'
 			T.codes_all[code]['buy_price'] = current
-			log(f'BUY_AT_BREAKOUT: {code} {T.codes_all[code]["name"]}')
+			log(f'{current_time} BUY_AT_BREAKOUT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 买入: buy_date为None, 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
 		if T.codes_all[code]['buy_date'] is None and current_time > T.CHECK_CLOSE_PRICE_TIME and current > lateral_high and amount_ratios[-2] < 0.25 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
 			T.codes_all[code]['buy_date'] = T.CURRENT_DATE
 			T.codes_all[code]['buy_status'] = 'BUY_AT_AMOUNT'
 			T.codes_all[code]['buy_price'] = current
-			log(f'BUY_AT_AMOUNT: {code} {T.codes_all[code]["name"]}')
+			log(f'{current_time} BUY_AT_AMOUNT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
+			continue
 		# 卖出, 必须有买入日期且买入日期早于今天
 		if T.codes_all[code]['buy_date'] is None or T.codes_all[code]['buy_date'] >= T.CURRENT_DATE or T.codes_all[code]['sell_date'] is not None:
 			continue
 		# 卖出: 收盘成交量大于10倍120日均量, 立即卖出
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and amounts[-1] >= 10 * avg_amount_120:
-			log(f'SELL_AT_HIGH_AMOUNT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_HIGH_AMOUNT'
 			T.codes_all[code]['sell_price'] = current
+			log(f'{current_time} SELL_AT_HIGH_AMOUNT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 卖出: 收盘价跌破水平突破线时刻
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current <= lateral_high:
-			log(f'SELL_AT_CLOSE_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_BREAKOUT'
 			T.codes_all[code]['sell_price'] = current
+			log(f'{current_time} SELL_AT_CLOSE_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 卖出: 开盘价跌破水平支撑线时刻
 		if opens[-1] <= lateral_high:
-			log(f'SELL_AT_OPEN_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_BREAKOUT'
 			T.codes_all[code]['sell_price'] = current
+			log(f'{current_time} SELL_AT_OPEN_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 卖出: 收盘价跌破上升支撑线
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current <= support and current >= lateral_high:
@@ -391,18 +400,18 @@ def trade_on_handle_bar(contextInfo):
 			if opens[-1] < closes[-2] * 0.99 and rates[-2] > 9 and rates[-3] > 9 and rates[-4] > 9:
 				log(f'trade_on_handle_bar(): no SELL_AT_CLOSE_BELOW_SUPPORT due to opens[-1] < closes[-2] * 0.99 and rates[-2] > 9 and rates[-3] > 9 and rates[-4] > 9!')
 				continue
-			log(f'SELL_AT_CLOSE_BELOW_SUPPORT: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
 			T.codes_all[code]['sell_price'] = current
+			log(f'{current_time} SELL_AT_CLOSE_BELOW_SUPPORT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 卖出: 收盘突破上轨的时刻
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current >= upper:
-			log(f'SELL_AT_CLOSE_ABOVE_UPPER: {code} {T.codes_all[code]["name"]}')
 			T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_ABOVE_UPPER'
 			T.codes_all[code]['sell_price'] = current
-		continue
+			log(f'{current_time} SELL_AT_CLOSE_ABOVE_UPPER: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
+			continue
 
 	# 卖出股票
 	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CLOSE_ABOVE_UPPER'])
@@ -450,7 +459,7 @@ def trade_on_handle_bar(contextInfo):
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])
 				db_update_buy_price(code, T.codes_all[code]['buy_price'])
 				continue
-
+	# 打印变化的表格内容
 	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
 		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
 		log(f'T.codes_all=\n{df.to_string()}')
