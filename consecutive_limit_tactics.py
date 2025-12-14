@@ -111,7 +111,7 @@ def init_load_recommendations_from_db(contextInfo):
 	for df in df_filtered.itertuples():
 		T.codes_recommended[df.code] = {}
 		if df.name != get_stock_name(contextInfo, df.code):
-			log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
+			log(f'init_load_recommendations_from_db(): Warning! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
 		T.codes_recommended[df.code]['name'] = df.name
 		T.codes_recommended[df.code]['recommend_date'] = df.recommend_date
 		T.codes_recommended[df.code]['lateral_high_date'] = df.lateral_high_date
@@ -165,10 +165,10 @@ def init_trade_parameters(contextInfo):
 	# 算法参数
 	T.SLOPE = np.log(1.07)
 	T.BUY_AMOUNT = None
-	T.MARKET_OPEN_TIME = '09:30:00'
+	T.MARKET_OPEN_TIME = '09:25:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251211'
+	T.TARGET_DATE = '20251212'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -328,6 +328,8 @@ def trade_on_handle_bar(contextInfo):
 		T.last_current_time['top'] = current_time[:-3]
 		log(f'\t{current_time}')
 	# if T.MARKET_OPEN_TIME <= current_time <= T.TRANSACTION_CLOSE_TIME:
+	if current_time < T.MARKET_OPEN_TIME:
+		return
 	# 判断买卖条件, 并保存指令状态
 	for code in list(set(T.codes_all.keys())):
 		# 获取当前的最新价格
@@ -466,18 +468,18 @@ def trade_on_handle_bar(contextInfo):
 			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
 				log(f'sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
-				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '*'
 				db_update_sell_date(code, T.codes_all[code]['sell_date'])
 				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				db_update_sell_price(code, T.codes_all[code]['sell_price'])				
+				T.codes_all[code]['sell_status'] += '*'
 				continue
 			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_ABOVE_UPPER':
 				log(f'sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
-				T.codes_all[code]['sell_status'] = T.codes_all[code]['sell_status'] + '*'
 				db_update_sell_date(code, T.codes_all[code]['sell_date'])
 				db_update_sell_status(code, T.codes_all[code]['sell_status'])
 				db_update_sell_price(code, T.codes_all[code]['sell_price'])
+				T.codes_all[code]['sell_status'] += '*'
 				continue
 	# 买入股票
 	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'])
@@ -490,18 +492,18 @@ def trade_on_handle_bar(contextInfo):
 			if current_time >= T.TRANSACTION_CLOSE_TIME and T.codes_all[code]['buy_status'] == 'BUY_AT_AMOUNT':
 				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
-				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '*'
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])		
 				db_update_buy_price(code, T.codes_all[code]['buy_price'])		
+				T.codes_all[code]['buy_status'] += '*'
 				continue
 			if T.codes_all[code]['buy_status'] == 'BUY_AT_BREAKOUT':
 				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
-				T.codes_all[code]['buy_status'] = T.codes_all[code]['buy_status'] + '*'
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
 				db_update_buy_status(code, T.codes_all[code]['buy_status'])
 				db_update_buy_price(code, T.codes_all[code]['buy_price'])
+				T.codes_all[code]['buy_status'] += '*'
 				continue
 	# 打印变化的表格内容
 	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
