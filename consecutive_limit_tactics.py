@@ -17,7 +17,7 @@ def init(contextInfo):
 	if T.download_mode:
 		return
 	init_trade_parameters(contextInfo)
-	init_clear_log_file(contextInfo)
+	# init_clear_log_file(contextInfo)
 	log('\n' + '=' * 40 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 40)
 	db_init()
 	init_load_codes_in_position(contextInfo)
@@ -168,7 +168,7 @@ def init_trade_parameters(contextInfo):
 	T.MARKET_OPEN_TIME = '09:25:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
-	T.TARGET_DATE = '20251212'
+	T.TARGET_DATE = ''
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -255,16 +255,19 @@ def trade_refine_codes_all(contextInfo):
 	start_date = '20240418'
 	filtered_codes_all = {}
 	for code in list(set(T.codes_all.keys())):
-		market_data = contextInfo.get_market_data_ex(['high', 'close'], [code], period='1d', start_time=start_date, end_time=T.codes_all[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
-		highs = market_data[code]['high'].astype(float)
-		closes= market_data[code]['close'].astype(float)
+		market_data_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=start_date, end_time=T.codes_all[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
+		# 获取当前交易日和昨日的收盘价
+		market_data_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', end_time=T.CURRENT_DATE, count=2, dividend_type='front', fill_data=False, subscribe=True)
+		highs = market_data_high[code]['high'].astype(float)
+		closes= market_data_close[code]['close'].astype(float)
 		lateral_high_date = highs.idxmax()
 		lateral_high = max(highs)
 		if T.codes_all[code]['lateral_high_date'] != lateral_high_date:
 			log(f'trade_refine_codes_all(): code={code}, name={T.codes_all[code]["name"]}. Error! Invalid lateral_high_date! lateral_high_date={lateral_high_date}, db={T.codes_all[code]["lateral_high_date"]}')
 			continue
-		# 过滤掉还没有接近水平突破线的股票
-		if closes[-1] < lateral_high * 0.9:
+		# 过滤掉还没有接近水平突破线且买入日期, 卖出日期为空的股票. closes[0]为昨日, closes[1]为今日
+		if closes[0] < lateral_high * 0.9 and T.codes_all[code]['buy_date'] is None and T.codes_all[code]['sell_date'] is None:
+			log(f'trade_refine_codes_all(): {code} {T.codes_all[code]["name"]} is removed from T.codes_all. closes[0]={closes[0]:.2f}')
 			continue
 		# log(f'trade_refine_codes_all(): code={code}, name={T.codes_all[code]["name"]}, lateral_high={lateral_high:.2f}, closes[-1]={closes[-1]}')
 		filtered_codes_all[code] = T.codes_all[code]
@@ -752,7 +755,11 @@ def account_callback(contextInfo, accountInfo):
 # 委托主推函数
 def order_callback(contextInfo, orderInfo):
 	code = f"{orderInfo.m_strInstrumentID}.{orderInfo.m_strExchangeID}"
-	name = T.codes_all[code]["name"]
+	if code in T.codes_all:
+		name = T.codes_all[code]["name"]
+	else:
+		name = orderInfo.m_strInstrumentName
+		log(f'order_callback(): Warning! {code} {name} is not in T.codes_all! T.codes_all=\n{T.codes_all}')
 	# log(f'order_callback(): {code} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
@@ -772,7 +779,11 @@ def order_callback(contextInfo, orderInfo):
 # 成交主推函数
 def deal_callback(contextInfo, dealInfo):
 	code = f"{dealInfo.m_strInstrumentID}.{dealInfo.m_strExchangeID}"
-	name = T.codes_all[code]["name"]
+	if code in T.codes_all:
+		name = T.codes_all[code]["name"]
+	else:
+		name = dealInfo.m_strInstrumentName
+		log(f'deal_callback(): Warning! {code} {name} is not in T.codes_all! T.codes_all=\n{T.codes_all}')
 	# log(f'deal_callback(): {code} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
 	# 检查成交结果并记录
 	# log(f'deal_callback(): 成交确认 - 股票: {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
@@ -786,7 +797,11 @@ def deal_callback(contextInfo, dealInfo):
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
 	code = f"{positionInfo.m_strInstrumentID}.{positionInfo.m_strExchangeID}"
-	name = T.codes_all[code]["name"]
+	if code in T.codes_all:
+		name = T.codes_all[code]["name"]
+	else:
+		name = positionInfo.m_strInstrumentName
+		log(f'position_callback(): Warning! {code} {name} is not in T.codes_all! T.codes_all=\n{T.codes_all}')
 	# log(f'position_callback(): {code} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
 	# 检查持仓变化并记录
 	log(f'position_callback(): 持仓更新 - 股票: {code} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}, m_nDirection={positionInfo.m_nDirection}')
@@ -797,7 +812,11 @@ def position_callback(contextInfo, positionInfo):
 #下单出错回调函数
 def orderError_callback(contextInfo, passOrderInfo, msg):
 	code = f"{passOrderInfo.orderCode}"
-	name = T.codes_all[code]["name"]
+	if code in T.codes_all:
+		name = T.codes_all[code]["name"]
+	else:
+		name = "未知股票"
+		log(f'orderError_callback(): Warning! {code} {name} is not in T.codes_all! T.codes_all=\n{T.codes_all}')
 	log(f'\norderError_callback(): 下单错误 - 股票: {code} {name}, 错误信息: {msg}')
 	# 可以在这里添加逻辑，如重试下单或发送警报
 
