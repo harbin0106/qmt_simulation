@@ -169,7 +169,8 @@ def init_trade_parameters(contextInfo):
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
-	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
+	T.TRANSACTION_CLOSE_TIME = '14:56:40'
+	T.MARKET_CLOSE_TIME= '15:00:00'	
 	T.TARGET_DATE = ''
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
@@ -459,7 +460,7 @@ def trade_on_handle_bar(contextInfo):
 
 	# 卖出股票
 	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CLOSE_ABOVE_UPPER'] and T.codes_all[code]['sell_date'] is None)
-	if sell_count != 0:
+	if sell_count != 0 and current_time < T.MARKET_CLOSE_TIME:
 		for code in list(set(T.codes_all.keys())):
 			# 如果卖出日期不为空, 或者卖出状态为空, 跳过
 			if T.codes_all[code]['sell_date'] is not None or T.codes_all[code]['sell_status'] is None:
@@ -483,7 +484,7 @@ def trade_on_handle_bar(contextInfo):
 				continue
 	# 买入股票
 	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'] and T.codes_all[code]['buy_date'] is None)
-	if buy_count != 0:
+	if buy_count != 0 and current_time < T.MARKET_CLOSE_TIME:
 		if T.BUY_AMOUNT is None:
 			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 3
 		for code in list(set(T.codes_all.keys())):
