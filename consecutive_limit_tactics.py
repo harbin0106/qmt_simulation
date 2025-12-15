@@ -76,7 +76,8 @@ def init_load_codes_in_position(contextInfo):
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
 			T.codes_in_position[code]['buy_date'] = buy_dates.get(code, '')  # 使用成交日期
-	log(f'init_load_codes_in_position(): T.codes_in_position=\n{T.codes_in_position}')
+	df = pd.DataFrame.from_dict(T.codes_in_position, orient='index')
+	log(f'init_load_codes_in_position(): T.codes_in_position=\n{df.to_string()}')
 
 def init_load_recommendations_from_excel(contextInfo):
 	recommend_date = trade_get_previous_trade_date(contextInfo)
@@ -95,7 +96,7 @@ def init_load_recommendations_from_excel(contextInfo):
 		code = row['股票代码']
 		name = row['股票名称']
 		r_date = str(row['指定日期T'])
-		db_save_stock_status(code, name, r_date, None, None, None, None, 'Y', '', '')
+		db_save_stock_status(code, name, r_date, r_date, None, None, None, None, 'Y', '', '')
 
 def init_load_recommendations_from_db(contextInfo):
 	T.codes_recommended = {}
@@ -132,7 +133,7 @@ def init_load_recommendations_from_db(contextInfo):
 	# 判断T.codes_in_postition在T.codes_recommended中是否存在
 	for code in T.codes_in_position:
 		if code not in T.codes_recommended:
-			log(f'init_load_recommendations_from_db(): Error! code {code} in position but not in recommendations!')
+			log(f'init_load_recommendations_from_db(): Warning! code {code} {T.codes_in_position[code]["name"]} in position but not in recommendations!')
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -839,7 +840,7 @@ def db_init():
 	cursor = conn.cursor()
 	cursor.execute('''
 	CREATE TABLE IF NOT EXISTS stock_status (
-		code TEXT PRIMARY KEY,
+		code TEXT,
 		name TEXT,
 		recommend_date TEXT,
 		lateral_high_date TEXT,
@@ -849,19 +850,20 @@ def db_init():
 		sell_price REAL,
 		effective TEXT,
 		buy_status TEXT,
-		sell_status TEXT
+		sell_status TEXT,
+		PRIMARY KEY (code, recommend_date)
 	)
 	''')
 	conn.commit()
 	conn.close()
 
-# def db_save_stock_status(code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective=None, buy_status='', sell_status=''):
+# def db_save_stock_status(code, name, recommend_date, lateral_high_date=None, buy_date=None, buy_price=None, sell_date=None, sell_price=None, effective=None, buy_status='', sell_status=''):
 # 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 # 	cursor = conn.cursor()
 # 	cursor.execute('''
-# 	INSERT OR REPLACE INTO stock_status (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status)
-# 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-# 	''', (code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status))
+# 	INSERT OR REPLACE INTO stock_status (code, name, recommend_date, lateral_high_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status)
+# 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+# 	''', (code, name, recommend_date, lateral_high_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status))
 # 	conn.commit()
 # 	conn.close()
 
@@ -916,44 +918,50 @@ def db_load_all():
 # 		return None
 
 def db_update_buy_status(code, buy_status):
+	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET buy_status = ? WHERE code = ?', (buy_status, code))
+	cursor.execute('UPDATE stock_status SET buy_status = ? WHERE code = ? AND recommend_date = ?', (buy_status, code, recommend_date))
 	conn.commit()
 	conn.close()
 
 def db_update_buy_date(code, buy_date):
+	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET buy_date = ? WHERE code = ?', (buy_date, code))
+	cursor.execute('UPDATE stock_status SET buy_date = ? WHERE code = ? AND recommend_date = ?', (buy_date, code, recommend_date))
 	conn.commit()
 	conn.close()
-	
+
 def db_update_buy_price(code, buy_price):
+	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET buy_price = ? WHERE code = ?', (buy_price, code))
+	cursor.execute('UPDATE stock_status SET buy_price = ? WHERE code = ? AND recommend_date = ?', (buy_price, code, recommend_date))
 	conn.commit()
 	conn.close()
 
 def db_update_sell_status(code, sell_status):
+	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET sell_status = ? WHERE code = ?', (sell_status, code))
+	cursor.execute('UPDATE stock_status SET sell_status = ? WHERE code = ? AND recommend_date = ?', (sell_status, code, recommend_date))
 	conn.commit()
 	conn.close()
 
 def db_update_sell_date(code, sell_date):
+	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET sell_date = ? WHERE code = ?', (sell_date, code))
+	cursor.execute('UPDATE stock_status SET sell_date = ? WHERE code = ? AND recommend_date = ?', (sell_date, code, recommend_date))
 	conn.commit()
 	conn.close()
-	
+
 def db_update_sell_price(code, sell_price):
+	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET sell_price = ? WHERE code = ?', (sell_price, code))
+	cursor.execute('UPDATE stock_status SET sell_price = ? WHERE code = ? AND recommend_date = ?', (sell_price, code, recommend_date))
 	conn.commit()
 	conn.close()
 	
