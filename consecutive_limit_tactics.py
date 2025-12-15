@@ -125,7 +125,8 @@ def init_load_recommendations_from_db(contextInfo):
 		T.codes_recommended[df.code]['lateral_high'] = None
 		T.codes_recommended[df.code]['support'] = None
 		T.codes_recommended[df.code]['upper'] = None
-	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
+	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')		
+	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{df.to_string()}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
 	# 判断T.codes_in_postition在T.codes_recommended中是否存在
@@ -165,7 +166,7 @@ def init_trade_parameters(contextInfo):
 	# 算法参数
 	T.SLOPE = np.log(1.07)
 	T.BUY_AMOUNT = None
-	T.MARKET_OPEN_TIME = '09:25:00'
+	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
 	T.TRANSACTION_CLOSE_TIME = '14:56:40'	
 	T.TARGET_DATE = ''
@@ -604,9 +605,9 @@ def trade_sell_stock(contextInfo, code, comment):
 	if volume == 0:
 		log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
 		return
-	volume = 100  # 测试时先卖100股
+	# volume = 100  # 测试时先卖100股
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, 卖出 {volume} 股 (测试时先卖100股)')
+	log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, 卖出 {volume} 股')
 
 def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, comment):
 	# log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {T.codes_all[code]["name"]}, buy_amount={buy_amount:.2f}元')
@@ -687,26 +688,28 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 		return
 	last_price = market_data[code]['lastPrice'][0]
 	log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
-	# 计算买入100股的成本
-	min_volume = 100
-	min_amount = min_volume * last_price
-	total_min_amount = min_amount + trade_get_fee(contextInfo, min_amount)
-	if total_min_amount > buy_amount:
-		log(f'trade_buy_stock_by_amount(): Error! 买入金额不足! 买入最少100股需要总成本{total_min_amount:.2f} 元，超过买入金额 {buy_amount:.2f} 元，跳过!')
+	# 计算买入股数
+	volume = int(buy_amount / last_price // 100) * 100
+	if volume < 100:
+		log(f'trade_buy_stock_by_amount(): Error! 买入股数不足! 计算得买入 {volume} 股，少于100股，跳过!')
 		return
-	# 检查总成本是否超过可用资金
+	# 计算买入金额
+	actual_buy_amount = volume * last_price
+	total_cost = actual_buy_amount + trade_get_fee(contextInfo, actual_buy_amount)
+	# 检查总成本是否超过可用资金，如果不足则减少股数
 	available_cash = trade_get_cash(contextInfo)
-	if total_min_amount > available_cash:
-		log(f'trade_buy_stock_by_amount(): Error! 可用资金不足! 买入最少100股需要总成本{total_min_amount:.2f} 元，超过可用资金 {available_cash:.2f} 元，跳过!')
+	while total_cost > available_cash and volume >= 200:
+		volume -= 100
+		actual_buy_amount = volume * last_price
+		total_cost = actual_buy_amount + trade_get_fee(contextInfo, actual_buy_amount)
+	if volume < 100 or total_cost > available_cash:
+		log(f'trade_buy_stock_by_amount(): Error! 可用资金不足! 买入 {volume} 股需要总成本{total_cost:.2f} 元，超过可用资金 {available_cash:.2f} 元，跳过!')
 		return
-	total_amount = buy_amount + trade_get_fee(contextInfo, buy_amount)
-	if total_amount > available_cash:
-		fee = trade_get_fee(contextInfo, available_cash)
-		buy_amount = available_cash - fee
-		log(f'trade_buy_stock_by_amount(): Warning! 可用资金不足! 按可用资金{buy_amount:.2f}元 + 交易费{fee:.2f} 元买入!')
-	# 使用passorder进行市价买入
-	passorder(T.opType_buy, T.orderType_amount, T.accountid, code, T.prType_latest, T.price_invalid, buy_amount, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 市价买入金额 {buy_amount:.2f} 元')
+
+	# 使用passorder进行市价买入，按股数
+	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_latest, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
+	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 市价买入 {volume} 股，预计成交金额 {actual_buy_amount:.2f} 元')
+
 
 def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
 	log(f'trade_buy_stock_by_volume(): {code} {T.codes_all[code]["name"]}, volume={volume} 股')
