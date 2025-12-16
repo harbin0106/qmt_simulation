@@ -492,7 +492,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes_all[code]['buy_date'] is not None or T.codes_all[code]['buy_status'] is None:
 				continue
 			if current_time >= T.TRANSACTION_CLOSE_TIME and T.codes_all[code]['buy_status'] == 'BUY_AT_AMOUNT':
-				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT}')
+				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
 				T.codes_all[code]['buy_date'] = T.CURRENT_DATE
 				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
@@ -689,7 +689,7 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 		log(f'trade_buy_stock_by_amount(): Error! 无法获取{code} {T.codes_all[code]["name"]}的最新股价!')
 		return
 	last_price = market_data[code]['lastPrice'][0]
-	log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
+	# log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
 	# 计算买入股数
 	volume = int(buy_amount / last_price // 100) * 100
 	if volume < 100:
@@ -708,10 +708,9 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 		log(f'trade_buy_stock_by_amount(): Error! 可用资金不足! 买入 {volume} 股需要总成本{total_cost:.2f} 元，超过可用资金 {available_cash:.2f} 元，跳过!')
 		return
 
-	# 使用passorder进行市价买入，按股数
-	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_latest, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 市价买入 {volume} 股，预计成交金额 {actual_buy_amount:.2f} 元')
-
+	# 使用passorder进行指定价格last_price买入，按股数
+	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, last_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
+	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 指定价格{last_price:.2f} 买入 {volume} 股，预计成交金额 {actual_buy_amount:.2f} 元')
 
 def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
 	log(f'trade_buy_stock_by_volume(): {code} {T.codes_all[code]["name"]}, volume={volume} 股')
