@@ -934,6 +934,7 @@ def db_update_buy_date(code, buy_date):
 	conn.close()
 
 def db_update_buy_price(code, buy_price):
+	buy_price = round(buy_price, 2)
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
@@ -958,6 +959,7 @@ def db_update_sell_date(code, sell_date):
 	conn.close()
 
 def db_update_sell_price(code, sell_price):
+	sell_price = round(sell_price, 2)
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
