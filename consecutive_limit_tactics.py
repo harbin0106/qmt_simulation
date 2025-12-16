@@ -486,7 +486,7 @@ def trade_on_handle_bar(contextInfo):
 	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'] and T.codes_all[code]['buy_date'] is None)
 	if buy_count != 0 and current_time < T.MARKET_CLOSE_TIME:
 		if T.BUY_AMOUNT is None:
-			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 3
+			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 10
 		for code in list(set(T.codes_all.keys())):
 			# 如果买入日期不为空, 或者买入状态为空, 跳过
 			if T.codes_all[code]['buy_date'] is not None or T.codes_all[code]['buy_status'] is None:
