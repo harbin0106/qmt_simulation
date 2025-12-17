@@ -610,8 +610,14 @@ def trade_sell_stock(contextInfo, code, comment):
 		log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, Error! volume == 0! 没有可卖的持仓，跳过卖出操作')
 		return
 	# volume = 100  # 测试时先卖100股
-	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_buy_1, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, 卖出 {volume} 股')
+	# 通过指定价格卖出
+	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+	if code not in market_data or market_data[code].empty:
+		log(f'trade_sell_stock(): Error! 无法获取{code} {T.codes_all[code]["name"]}的最新股价!')
+		return
+	last_price = market_data[code]['lastPrice'][0]
+	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_designated, last_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
+	log(f'trade_sell_stock(): {code} {T.codes_all[code]["name"]}, {comment}, 以 {last_price:.2f} 元卖出 {volume} 股')
 
 def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, comment):
 	# log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {T.codes_all[code]["name"]}, buy_amount={buy_amount:.2f}元')
