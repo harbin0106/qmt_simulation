@@ -799,10 +799,7 @@ def deal_callback(contextInfo, dealInfo):
 	# log(f'deal_callback(): 成交确认 - 股票: {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
 	# 可以在这里添加更多逻辑，如更新全局变量、发送通知等
 	# 例如，检查是否为买入或卖出，并更新持仓统计
-	if dealInfo.m_nDirection == 48:  # 买入
-		log(f'deal_callback(): {code} {name}, 买入成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f} 元, m_strOptName={dealInfo.m_strOptName}')
-	elif dealInfo.m_nDirection == 49:  # 卖出
-		log(f'deal_callback(): {code} {name}, 卖出成交 - 更新持仓信息, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f} 元, m_strOptName={dealInfo.m_strOptName}')
+	log(f'deal_callback(): {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f} 元, m_strOptName={dealInfo.m_strOptName}')
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
