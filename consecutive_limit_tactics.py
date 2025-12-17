@@ -134,6 +134,8 @@ def init_load_recommendations_from_db(contextInfo):
 	for code in T.codes_in_position:
 		if code not in T.codes_recommended:
 			log(f'init_load_recommendations_from_db(): Warning! code {code} {T.codes_in_position[code]["name"]} in position but not in recommendations!')
+		if T.codes_recommended[code]['sell_date'] is not None:
+			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "sell_date" is not None!')
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
