@@ -211,44 +211,44 @@ def on_timer(contextInfo):
 		on_timer.stop_timer = False
 	if on_timer.stop_timer:
 		return
-	current_time = datetime.now().strftime("%H:%M:%S")
-	STOP_TIMER_TIME = "09:25:00"
-	CHECK_PRICE_TIME = "09:24:00"
-	BUY_STOCK_TIME = "09:24:30"
-	if current_time > STOP_TIMER_TIME:
-		log("on_timer(): 集合竞价结束")
-		on_timer.stop_timer = True
-		return
-	# Check prices only
-	if current_time >= CHECK_PRICE_TIME and current_time < BUY_STOCK_TIME:
-		log(f'\non_timer(): current_time={current_time}, check price......')
-		ticks = contextInfo.get_full_tick(list(set(T.codes_recommended.keys())))
-		# log(f'on_timer(): ticks=\n{ticks}')
-		for code in list(set(T.codes_recommended.keys())):
-			last_price = ticks[code]['lastPrice']
-			recommend_date = T.codes_recommended[code]['recommend_date']
-			to_buy = trade_is_to_buy(contextInfo, code, last_price, recommend_date)
-			if to_buy and T.codes_recommended[code]['buy_status'] == '':
-				log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, current_time={current_time}, last_price={last_price:.2f}, recommend_date={recommend_date}, to_buy={to_buy}')
-				T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
-				db_update_buy_status(code, T.codes_recommended[code]['buy_status'])
+	# current_time = datetime.now().strftime("%H:%M:%S")
+	# STOP_TIMER_TIME = "09:25:00"
+	# CHECK_PRICE_TIME = "09:24:00"
+	# BUY_STOCK_TIME = "09:24:30"
+	# if current_time > STOP_TIMER_TIME:
+	# 	log("on_timer(): 集合竞价结束")
+	# 	on_timer.stop_timer = True
+	# 	return
+	# # Check prices only
+	# if current_time >= CHECK_PRICE_TIME and current_time < BUY_STOCK_TIME:
+	# 	log(f'\non_timer(): current_time={current_time}, check price......')
+	# 	ticks = contextInfo.get_full_tick(list(set(T.codes_recommended.keys())))
+	# 	# log(f'on_timer(): ticks=\n{ticks}')
+	# 	for code in list(set(T.codes_recommended.keys())):
+	# 		last_price = ticks[code]['lastPrice']
+	# 		recommend_date = T.codes_recommended[code]['recommend_date']
+	# 		to_buy = trade_is_to_buy(contextInfo, code, last_price, recommend_date)
+	# 		if to_buy and T.codes_recommended[code]['buy_status'] == '':
+	# 			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, current_time={current_time}, last_price={last_price:.2f}, recommend_date={recommend_date}, to_buy={to_buy}')
+	# 			T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
+	# 			db_insert_status_record(code, status=T.codes_recommended[code]['buy_status'])
 
-	log(f'on_timer(): T.codes_recommended={T.codes_recommended}')
-	# 下单买入
-	# 计算标记为'BUY_AT_CALL_AUCTION'的股票个数
-	if current_time >= BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
-		buy_at_open_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('buy_status') == 'BUY_AT_CALL_AUCTION')
-		if buy_at_open_count == 0:
-			log(f'on_timer(): no stocks to buy......')
-			return
-		amount_of_each_stock = (trade_get_cash(contextInfo) / buy_at_open_count - T.commission_minimum) / (1 + T.commission_rate + T.transfer_fee_rate) / 1000
-		for code in list(set(T.codes_recommended.keys())):
-			if T.codes_recommended[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
-				continue
-			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, buying at amount {amount_of_each_stock:.2f}元')
-			trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
-			T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
-			db_update_buy_status(code, T.codes_recommended[code]['buy_status'])
+	# log(f'on_timer(): T.codes_recommended={T.codes_recommended}')
+	# # 下单买入
+	# # 计算标记为'BUY_AT_CALL_AUCTION'的股票个数
+	# if current_time >= BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
+	# 	buy_at_open_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('buy_status') == 'BUY_AT_CALL_AUCTION')
+	# 	if buy_at_open_count == 0:
+	# 		log(f'on_timer(): no stocks to buy......')
+	# 		return
+	# 	amount_of_each_stock = (trade_get_cash(contextInfo) / buy_at_open_count - T.commission_minimum) / (1 + T.commission_rate + T.transfer_fee_rate) / 1000
+	# 	for code in list(set(T.codes_recommended.keys())):
+	# 		if T.codes_recommended[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
+	# 			continue
+	# 		log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, buying at amount {amount_of_each_stock:.2f}元')
+	# 		trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
+	# 		T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
+	# 		db_insert_status_record(code, status=T.codes_recommended[code]['buy_status'])
 	
 def after_init(contextInfo):
 	if T.download_mode:
@@ -484,18 +484,14 @@ def trade_on_handle_bar(contextInfo):
 			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
 				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
-				db_update_sell_date(code, T.codes_all[code]['sell_date'])
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
-				db_update_sell_price(code, T.codes_all[code]['sell_price'])				
+				db_insert_status_record(code, date=T.codes_all[code]['sell_date'], status=T.codes_all[code]['sell_status'], price=T.codes_all[code]['sell_price'])
 				T.codes_all[code]['sell_status'] += '*'
 				continue
 			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_ABOVE_UPPER':
 				log(f'sell_count={sell_count}')
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
-				T.codes_all[code]['sell_date'] = T.CURRENT_DATE				
-				db_update_sell_date(code, T.codes_all[code]['sell_date'])
-				db_update_sell_status(code, T.codes_all[code]['sell_status'])
-				db_update_sell_price(code, T.codes_all[code]['sell_price'])
+				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
+				db_insert_status_record(code, date=T.codes_all[code]['sell_date'], status=T.codes_all[code]['sell_status'], price=T.codes_all[code]['sell_price'])
 				T.codes_all[code]['sell_status'] += '*'
 				continue
 	# 买入股票
@@ -511,18 +507,14 @@ def trade_on_handle_bar(contextInfo):
 				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
 				T.codes_all[code]['buy_date'] = T.CURRENT_DATE
-				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
-				db_update_buy_status(code, T.codes_all[code]['buy_status'])		
-				db_update_buy_price(code, T.codes_all[code]['buy_price'])		
+				db_insert_status_record(code, date=T.codes_all[code]['buy_date'], status=T.codes_all[code]['buy_status'], price=T.codes_all[code]['buy_price'])
 				T.codes_all[code]['buy_status'] += '*'
 				continue
 			if T.codes_all[code]['buy_status'] == 'BUY_AT_BREAKOUT':
 				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
 				T.codes_all[code]['buy_date'] = T.CURRENT_DATE
-				db_update_buy_date(code, T.codes_all[code]['buy_date'])				
-				db_update_buy_status(code, T.codes_all[code]['buy_status'])
-				db_update_buy_price(code, T.codes_all[code]['buy_price'])
+				db_insert_status_record(code, date=T.codes_all[code]['buy_date'], status=T.codes_all[code]['buy_status'], price=T.codes_all[code]['buy_price'])
 				T.codes_all[code]['buy_status'] += '*'
 				continue
 	# 打印变化的表格内容
@@ -788,10 +780,10 @@ def order_callback(contextInfo, orderInfo):
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
 		log(f'order_callback(): 委托已全部成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.2f} 元, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
-		if '买' in orderInfo.m_strOptName:
-			db_update_buy_price(code, orderInfo.m_dTradedPrice)
-		elif '卖' in orderInfo.m_strOptName:
-			db_update_sell_price(code, orderInfo.m_dTradedPrice)
+		# if '买' in orderInfo.m_strOptName:
+		# 	db_insert_status_record(code, price=orderInfo.m_dTradedPrice)
+		# elif '卖' in orderInfo.m_strOptName:
+		# 	db_insert_status_record(code, price=orderInfo.m_dTradedPrice)
 	elif orderInfo.m_nOrderStatus == 55:  # 部成
 		log(f'order_callback(): 委托部分成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.2f} 元, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
 	elif orderInfo.m_nOrderStatus == 54:  # 已撤
@@ -935,53 +927,18 @@ def db_load_all():
 # 	else:
 # 		return None
 
-def db_update_buy_status(code, buy_status):
+def db_insert_status_record(code, date, status, price):
+	if code is None or date is None or status is None or price is None:
+		return
 	recommend_date = T.codes_recommended[code]['recommend_date']
+	name = T.codes_recommended[code]['name']
+	effective = 'Y'
+	lateral_high_date = T.codes_recommended[code]['lateral_high_date']
+	profit = None
+	comment = ''
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET status = ? WHERE code = ? AND recommend_date = ? AND status LIKE "BUY%"', (buy_status, code, recommend_date))
-	conn.commit()
-	conn.close()
-
-def db_update_buy_date(code, buy_date):
-	recommend_date = T.codes_recommended[code]['recommend_date']
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
-	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET date = ? WHERE code = ? AND recommend_date = ? AND status LIKE "BUY%"', (buy_date, code, recommend_date))
-	conn.commit()
-	conn.close()
-
-def db_update_buy_price(code, buy_price):
-	buy_price = round(buy_price, 2)
-	recommend_date = T.codes_recommended[code]['recommend_date']
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
-	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET price = ? WHERE code = ? AND recommend_date = ? AND status LIKE "BUY%"', (buy_price, code, recommend_date))
-	conn.commit()
-	conn.close()
-
-def db_update_sell_status(code, sell_status):
-	recommend_date = T.codes_recommended[code]['recommend_date']
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
-	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET status = ? WHERE code = ? AND recommend_date = ? AND status LIKE "SELL%"', (sell_status, code, recommend_date))
-	conn.commit()
-	conn.close()
-
-def db_update_sell_date(code, sell_date):
-	recommend_date = T.codes_recommended[code]['recommend_date']
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
-	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET date = ? WHERE code = ? AND recommend_date = ? AND status LIKE "SELL%"', (sell_date, code, recommend_date))
-	conn.commit()
-	conn.close()
-
-def db_update_sell_price(code, sell_price):
-	sell_price = round(sell_price, 2)
-	recommend_date = T.codes_recommended[code]['recommend_date']
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
-	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET price = ? WHERE code = ? AND recommend_date = ? AND status LIKE "SELL%"', (sell_price, code, recommend_date))
+	cursor.execute('INSERT INTO stock_status (code, name, effective, recommend_date, lateral_high_date, date, status, price, profit, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (code, name, effective, recommend_date, lateral_high_date, date, status, round(price, 2), profit, comment))
 	conn.commit()
 	conn.close()
 	
