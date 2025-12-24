@@ -108,7 +108,7 @@ def init_load_recommendations_from_db(contextInfo):
 	# latest_recommend_date = df_all['recommend_date'].max()
 	# if recommend_date != latest_recommend_date:
 	# 	log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
-	df_filtered = df_all[df_all['effective'] == 'Y']
+	df_filtered = df_all[df_all['is_valid'] == 'Y']
 	for df in df_filtered.itertuples():
 		code = df.code
 		if code not in T.codes_recommended:
@@ -118,7 +118,7 @@ def init_load_recommendations_from_db(contextInfo):
 			T.codes_recommended[code]['name'] = df.name
 			T.codes_recommended[code]['recommend_date'] = df.recommend_date
 			T.codes_recommended[code]['lateral_high_date'] = df.lateral_high_date
-			T.codes_recommended[code]['effective'] = df.effective
+			T.codes_recommended[code]['is_valid'] = df.is_valid
 			T.codes_recommended[code]['buy_date'] = None
 			T.codes_recommended[code]['buy_price'] = None
 			T.codes_recommended[code]['sell_date'] = None
@@ -846,22 +846,34 @@ def log(*args):
 	with open(file_path, 'a', encoding='utf-8') as f:
 		f.write(message)
 
+# recommends表格存放推荐股票数据, 包括股票代码, 股票名字, 是否有效, 推荐日期, 历史高点日期. records表格存放操作记录, 包括自增ID, 股票代码, 股票名字, 交易日期, 交易类型, 交易价格, 股数, 利润,和备注. recommends表上的股票代码对应records表的多条记录, 通过股票代码关联在一起. 
 def db_init():
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
+
 	cursor.execute('''
-	CREATE TABLE IF NOT EXISTS stock_status (
+	CREATE TABLE IF NOT EXISTS recommends (
+		code TEXT,
+		name TEXT,
+		is_valid TEXT,
+		recommend_date TEXT,
+		lateral_high_date TEXT,
+		PRIMARY KEY (code, recommend_date)
+	)
+	''')
+
+	cursor.execute('''
+	CREATE TABLE IF NOT EXISTS records (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		code TEXT,
 		name TEXT,
-		effective TEXT,
-		recommend_date TEXT,
-		lateral_high_date TEXT,
 		date TEXT,
-		status TEXT,
+		type TEXT,
 		price REAL,
+		shares REAL,
 		profit REAL,
-		comment TEXT
+		comment TEXT,
+		FOREIGN KEY (code) REFERENCES recommends(code)
 	)
 	''')
 	conn.commit()
