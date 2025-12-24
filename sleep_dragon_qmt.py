@@ -104,34 +104,46 @@ def init_load_recommendations_from_db(contextInfo):
 	# recommend_date = trade_get_previous_trade_date(contextInfo)
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
+	log(f'df_all=\n{df_all}')
 	# 判断recommend_date是否是数据库里的最新日期
 	# latest_recommend_date = df_all['recommend_date'].max()
 	# if recommend_date != latest_recommend_date:
 	# 	log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
 	df_filtered = df_all[df_all['is_valid'] == 'Y']
+	# 根据df_all的表格结构, 把所有数据转换到T.codes_recommended里
 	for df in df_filtered.itertuples():
 		code = df.code
 		if code not in T.codes_recommended:
-			T.codes_recommended[code] = {}
+			T.codes_recommended[code] = {
+				'name': df.name,
+				'recommend_date': df.recommend_date,
+				'lateral_high_date': df.lateral_high_date,
+				'price': None,
+				'type': None,
+				'lateral_high': None,
+				'support': None,
+				'upper': None,
+				'records': []
+			}
 			if df.name != get_stock_name(contextInfo, df.code):
 				log(f'init_load_recommendations_from_db(): Warning! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
-			T.codes_recommended[code]['name'] = df.name
-			T.codes_recommended[code]['recommend_date'] = df.recommend_date
-			T.codes_recommended[code]['lateral_high_date'] = df.lateral_high_date
-			T.codes_recommended[code]['is_valid'] = df.is_valid
-			T.codes_recommended[code]['buy_date'] = None
-			T.codes_recommended[code]['buy_price'] = None
-			T.codes_recommended[code]['sell_date'] = None
-			T.codes_recommended[code]['sell_price'] = None
-			T.codes_recommended[code]['buy_status'] = None
-			T.codes_recommended[code]['sell_status'] = None
-			T.codes_recommended[code]['lateral_high'] = None
-			T.codes_recommended[code]['support'] = None
-			T.codes_recommended[code]['upper'] = None
-			T.codes_recommended[code]['profit'] = df.profit
-			T.codes_recommended[code]['comment'] = df.comment
+		record = {
+			'date': df.date,
+			'type': df.type,
+			'price': df.price,
+			'shares': df.shares,
+			'profit': df.profit,
+			'comment': df.comment
+		}
+		T.codes_recommended[code]['records'].append(record)
+	# 枚举T.codes_recommended所有的code, 把它的最近日期'records'的内容复制给T.codes_rocommended[code]['type'].
+	for code in T.codes_recommended:
+		if T.codes_recommended[code]['records']:
+			latest_record = max(T.codes_recommended[code]['records'], key=lambda r: r['date'])
+			T.codes_recommended[code]['type'] = latest_record['type']
+
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
-	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{df.to_string()}')
+	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
 	# 判断T.codes_in_postition在T.codes_recommended中是否存在
@@ -141,7 +153,7 @@ def init_load_recommendations_from_db(contextInfo):
 		if T.codes_recommended[code]['sell_date'] is not None:
 			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "sell_date" is not None!')
 			T.codes_recommended[code]['sell_date'] = None
-			T.codes_recommended[code]['sell_status'] = 'Error!'
+			T.codes_recommended[code]['type'] = 'Error!'
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -220,27 +232,27 @@ def on_timer(contextInfo):
 	# 		last_price = ticks[code]['lastPrice']
 	# 		recommend_date = T.codes_recommended[code]['recommend_date']
 	# 		to_buy = trade_is_to_buy(contextInfo, code, last_price, recommend_date)
-	# 		if to_buy and T.codes_recommended[code]['buy_status'] == '':
+	# 		if to_buy and T.codes_recommended[code]['type'] == '':
 	# 			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, current_time={current_time}, last_price={last_price:.2f}, recommend_date={recommend_date}, to_buy={to_buy}')
-	# 			T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
-	# 			db_insert_status_record(code, status=T.codes_recommended[code]['buy_status'])
+	# 			T.codes_recommended[code]['type'] = 'BUY_AT_CALL_AUCTION'
+	# 			db_insert_status_record(code, status=T.codes_recommended[code]['type'])
 
 	# log(f'on_timer(): T.codes_recommended={T.codes_recommended}')
 	# # 下单买入
 	# # 计算标记为'BUY_AT_CALL_AUCTION'的股票个数
 	# if current_time >= BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
-	# 	buy_at_open_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('buy_status') == 'BUY_AT_CALL_AUCTION')
+	# 	buy_at_open_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('type') == 'BUY_AT_CALL_AUCTION')
 	# 	if buy_at_open_count == 0:
 	# 		log(f'on_timer(): no stocks to buy......')
 	# 		return
 	# 	amount_of_each_stock = (trade_get_cash(contextInfo) / buy_at_open_count - T.commission_minimum) / (1 + T.commission_rate + T.transfer_fee_rate) / 1000
 	# 	for code in list(set(T.codes_recommended.keys())):
-	# 		if T.codes_recommended[code]['buy_status'] != 'BUY_AT_CALL_AUCTION':
+	# 		if T.codes_recommended[code]['type'] != 'BUY_AT_CALL_AUCTION':
 	# 			continue
 	# 		log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, buying at amount {amount_of_each_stock:.2f}元')
 	# 		trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
-	# 		T.codes_recommended[code]['buy_status'] = 'BUY_AT_CALL_AUCTION'
-	# 		db_insert_status_record(code, status=T.codes_recommended[code]['buy_status'])
+	# 		T.codes_recommended[code]['type'] = 'BUY_AT_CALL_AUCTION'
+	# 		db_insert_status_record(code, status=T.codes_recommended[code]['type'])
 	
 def after_init(contextInfo):
 	if T.download_mode:
@@ -418,13 +430,13 @@ def trade_on_handle_bar(contextInfo):
 		# 买入: buy_date为None, 只要超过lateral_high就买入
 		rates_result = rates[-2] > 9 and rates[-3] > 9 and lows[-2] <= lateral_high
 		if T.codes_all[code]['buy_date'] is None and current >= lateral_high and (rates_result or lows[-2] <= lateral_high * 0.97 or (abs(lows[-2] - lateral_high) < 0.01 * lateral_high and abs(lows[-3] - lateral_high) < 0.01 * lateral_high)):
-			T.codes_all[code]['buy_status'] = 'BUY_AT_BREAKOUT'
+			T.codes_all[code]['type'] = 'BUY_AT_BREAKOUT'
 			T.codes_all[code]['buy_price'] = current
 			log(f'{current_time} BUY_AT_BREAKOUT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 买入: buy_date为None, 当日收盘价大于lateral_high, 且成交额量比小于0.2, 且突破前2日收盘价最大值的0.97倍, 且前2日的涨幅绝对值小于3%, 且5日均线的导数大于阈值
 		if T.codes_all[code]['buy_date'] is None and current_time > T.CHECK_CLOSE_PRICE_TIME and current > lateral_high and amount_ratios[-2] < 0.25 and current >= 0.97 * max(closes[-2], closes[-3]) and abs(rates[-2]) < 3 and abs(rates[-3]) < 3 and ma5_derivative_normalized[-1] > -0.0005:
-			T.codes_all[code]['buy_status'] = 'BUY_AT_AMOUNT'
+			T.codes_all[code]['type'] = 'BUY_AT_AMOUNT'
 			T.codes_all[code]['buy_price'] = current
 			log(f'{current_time} BUY_AT_AMOUNT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
@@ -433,19 +445,19 @@ def trade_on_handle_bar(contextInfo):
 			continue
 		# 卖出: 收盘成交量大于10倍120日均量, 立即卖出
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and amounts[-1] >= 10 * avg_amount_120:
-			T.codes_all[code]['sell_status'] = 'SELL_AT_HIGH_AMOUNT'
+			T.codes_all[code]['type'] = 'SELL_AT_HIGH_AMOUNT'
 			T.codes_all[code]['sell_price'] = current
 			log(f'{current_time} SELL_AT_HIGH_AMOUNT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 卖出: 收盘价跌破水平突破线时刻
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current <= lateral_high:
-			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_BREAKOUT'
+			T.codes_all[code]['type'] = 'SELL_AT_CLOSE_BELOW_BREAKOUT'
 			T.codes_all[code]['sell_price'] = current
 			log(f'{current_time} SELL_AT_CLOSE_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 卖出: 开盘价跌破水平支撑线时刻
 		if opens[-1] <= lateral_high and False:
-			T.codes_all[code]['sell_status'] = 'SELL_AT_OPEN_BELOW_BREAKOUT'
+			T.codes_all[code]['type'] = 'SELL_AT_OPEN_BELOW_BREAKOUT'
 			T.codes_all[code]['sell_price'] = current
 			log(f'{current_time} SELL_AT_OPEN_BELOW_BREAKOUT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
@@ -455,59 +467,59 @@ def trade_on_handle_bar(contextInfo):
 			if opens[-1] < closes[-2] * 0.99 and rates[-2] > 9 and rates[-3] > 9 and rates[-4] > 9:
 				log(f'trade_on_handle_bar(): no SELL_AT_CLOSE_BELOW_SUPPORT due to opens[-1] < closes[-2] * 0.99 and rates[-2] > 9 and rates[-3] > 9 and rates[-4] > 9!')
 				continue
-			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
+			T.codes_all[code]['type'] = 'SELL_AT_CLOSE_BELOW_SUPPORT'
 			T.codes_all[code]['sell_price'] = current
 			log(f'{current_time} SELL_AT_CLOSE_BELOW_SUPPORT: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 		# 卖出: 收盘突破上轨的时刻
 		if current_time > T.CHECK_CLOSE_PRICE_TIME and current >= upper:
-			T.codes_all[code]['sell_status'] = 'SELL_AT_CLOSE_ABOVE_UPPER'
+			T.codes_all[code]['type'] = 'SELL_AT_CLOSE_ABOVE_UPPER'
 			T.codes_all[code]['sell_price'] = current
 			log(f'{current_time} SELL_AT_CLOSE_ABOVE_UPPER: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, support={support:.2f}, upper={upper:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 			continue
 
 	# 卖出股票
-	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('sell_status') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CLOSE_ABOVE_UPPER'] and T.codes_all[code]['sell_date'] is None)
+	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('type') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CLOSE_ABOVE_UPPER'] and T.codes_all[code]['sell_date'] is None)
 	if sell_count != 0 and current_time < T.MARKET_CLOSE_TIME:
 		for code in list(set(T.codes_all.keys())):
 			# 如果卖出日期不为空, 或者卖出状态为空, 跳过
-			if T.codes_all[code]['sell_date'] is not None or T.codes_all[code]['sell_status'] is None:
+			if T.codes_all[code]['sell_date'] is not None or T.codes_all[code]['type'] is None:
 				continue
-			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
-				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['type'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['type'] == 'SELL_AT_CLOSE_BELOW_SUPPORT'):
+				trade_sell_stock(contextInfo, code, T.codes_all[code]['type'])
 				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
-				db_insert_status_record(code, date=T.codes_all[code]['sell_date'], status=T.codes_all[code]['sell_status'], price=T.codes_all[code]['sell_price'])
-				T.codes_all[code]['sell_status'] += '*'
+				db_insert_status_record(code, date=T.codes_all[code]['sell_date'], status=T.codes_all[code]['type'], price=T.codes_all[code]['sell_price'])
+				T.codes_all[code]['type'] += '*'
 				continue
-			if T.codes_all[code]['sell_status'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['sell_status'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['sell_status'] == 'SELL_AT_CLOSE_ABOVE_UPPER':
+			if T.codes_all[code]['type'] == 'SELL_AT_OPEN_BELOW_BREAKOUT' or T.codes_all[code]['type'] == 'SELL_AT_HIGH_AMOUNT' or T.codes_all[code]['type'] == 'SELL_AT_CLOSE_ABOVE_UPPER':
 				log(f'sell_count={sell_count}')
-				trade_sell_stock(contextInfo, code, T.codes_all[code]['sell_status'])
+				trade_sell_stock(contextInfo, code, T.codes_all[code]['type'])
 				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
-				db_insert_status_record(code, date=T.codes_all[code]['sell_date'], status=T.codes_all[code]['sell_status'], price=T.codes_all[code]['sell_price'])
-				T.codes_all[code]['sell_status'] += '*'
+				db_insert_status_record(code, date=T.codes_all[code]['sell_date'], status=T.codes_all[code]['type'], price=T.codes_all[code]['sell_price'])
+				T.codes_all[code]['type'] += '*'
 				continue
 	# 买入股票
-	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('buy_status') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'] and T.codes_all[code]['buy_date'] is None)
+	buy_count = sum(1 for code in T.codes_all if T.codes_all[code].get('type') in ['BUY_AT_AMOUNT', 'BUY_AT_BREAKOUT'] and T.codes_all[code]['buy_date'] is None)
 	if buy_count != 0 and current_time < T.MARKET_CLOSE_TIME:
 		if T.BUY_AMOUNT is None:
 			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 10
 		for code in list(set(T.codes_all.keys())):
 			# 如果买入日期不为空, 或者买入状态为空, 跳过
-			if T.codes_all[code]['buy_date'] is not None or T.codes_all[code]['buy_status'] is None:
+			if T.codes_all[code]['buy_date'] is not None or T.codes_all[code]['type'] is None:
 				continue
-			if current_time >= T.TRANSACTION_CLOSE_TIME and T.codes_all[code]['buy_status'] == 'BUY_AT_AMOUNT':
+			if current_time >= T.TRANSACTION_CLOSE_TIME and T.codes_all[code]['type'] == 'BUY_AT_AMOUNT':
 				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
-				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
+				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
 				T.codes_all[code]['buy_date'] = T.CURRENT_DATE
-				db_insert_status_record(code, date=T.codes_all[code]['buy_date'], status=T.codes_all[code]['buy_status'], price=T.codes_all[code]['buy_price'])
-				T.codes_all[code]['buy_status'] += '*'
+				db_insert_status_record(code, date=T.codes_all[code]['buy_date'], status=T.codes_all[code]['type'], price=T.codes_all[code]['buy_price'])
+				T.codes_all[code]['type'] += '*'
 				continue
-			if T.codes_all[code]['buy_status'] == 'BUY_AT_BREAKOUT':
+			if T.codes_all[code]['type'] == 'BUY_AT_BREAKOUT':
 				log(f'buy_count={buy_count}, T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
-				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['buy_status'])
+				trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
 				T.codes_all[code]['buy_date'] = T.CURRENT_DATE
-				db_insert_status_record(code, date=T.codes_all[code]['buy_date'], status=T.codes_all[code]['buy_status'], price=T.codes_all[code]['buy_price'])
-				T.codes_all[code]['buy_status'] += '*'
+				db_insert_status_record(code, date=T.codes_all[code]['buy_date'], status=T.codes_all[code]['type'], price=T.codes_all[code]['buy_price'])
+				T.codes_all[code]['type'] += '*'
 				continue
 	# 打印变化的表格内容
 	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
@@ -871,20 +883,20 @@ def db_init():
 	conn.commit()
 	conn.close()
 
-# def db_save_stock_status(code, name, recommend_date, lateral_high_date=None, buy_date=None, buy_price=None, sell_date=None, sell_price=None, effective=None, buy_status='', sell_status=''):
+# def db_save_stock_status(code, name, recommend_date, lateral_high_date=None, buy_date=None, buy_price=None, sell_date=None, sell_price=None, effective=None, type='', type=''):
 # 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 # 	cursor = conn.cursor()
 # 	cursor.execute('''
-# 	INSERT OR REPLACE INTO stock_status (code, name, recommend_date, lateral_high_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status)
+# 	INSERT OR REPLACE INTO stock_status (code, name, recommend_date, lateral_high_date, buy_date, buy_price, sell_date, sell_price, effective, type, type)
 # 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-# 	''', (code, name, recommend_date, lateral_high_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status))
+# 	''', (code, name, recommend_date, lateral_high_date, buy_date, buy_price, sell_date, sell_price, effective, type, type))
 # 	conn.commit()
 # 	conn.close()
 
 def db_load_all():
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	df = pd.read_sql_query("""
-SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.date, rec.type, rec.price, rec.profit, rec.comment
+SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
 FROM recommends r
 LEFT JOIN records rec ON r.code = rec.code
 """, conn)
@@ -894,7 +906,7 @@ LEFT JOIN records rec ON r.code = rec.code
 # def db_load_stock_status(recommend_date):
 # 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 # 	cursor = conn.cursor()
-# 	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status FROM stock_status WHERE recommend_date = ?', (recommend_date,))
+# 	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective, type, type FROM stock_status WHERE recommend_date = ?', (recommend_date,))
 # 	rows = cursor.fetchall()
 # 	conn.close()
 # 	stock_status_list = []
@@ -908,15 +920,15 @@ LEFT JOIN records rec ON r.code = rec.code
 # 			'sell_date': row[5],
 # 			'sell_price': row[6],
 # 			'effective': row[7],
-# 			'buy_status': row[8],
-# 			'sell_status': row[9]
+# 			'type': row[8],
+# 			'type': row[9]
 # 		})
 # 	return stock_status_list
 
 # def db_load_stock_status(code):
 # 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 # 	cursor = conn.cursor()
-# 	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective, buy_status, sell_status FROM stock_status WHERE code = ?', (code,))
+# 	cursor.execute('SELECT code, name, recommend_date, buy_date, buy_price, sell_date, sell_price, effective, type, type FROM stock_status WHERE code = ?', (code,))
 # 	row = cursor.fetchone()
 # 	conn.close()
 # 	if row:
@@ -929,8 +941,8 @@ LEFT JOIN records rec ON r.code = rec.code
 # 			'sell_date': row[5],
 # 			'sell_price': row[6],
 # 			'effective': row[7],
-# 			'buy_status': row[8],
-# 			'sell_status': row[9]
+# 			'type': row[8],
+# 			'type': row[9]
 # 		}
 # 	else:
 # 		return None
