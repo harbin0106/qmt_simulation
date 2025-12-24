@@ -110,23 +110,35 @@ def init_load_recommendations_from_db(contextInfo):
 	# 	log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
 	df_filtered = df_all[df_all['effective'] == 'Y']
 	for df in df_filtered.itertuples():
-		T.codes_recommended[df.code] = {}
-		if df.name != get_stock_name(contextInfo, df.code):
-			log(f'init_load_recommendations_from_db(): Warning! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
-		T.codes_recommended[df.code]['name'] = df.name
-		T.codes_recommended[df.code]['recommend_date'] = df.recommend_date
-		T.codes_recommended[df.code]['lateral_high_date'] = df.lateral_high_date
-		T.codes_recommended[df.code]['buy_date'] = df.buy_date
-		T.codes_recommended[df.code]['buy_price'] = df.buy_price
-		T.codes_recommended[df.code]['sell_date'] = df.sell_date
-		T.codes_recommended[df.code]['sell_price'] = df.sell_price
-		T.codes_recommended[df.code]['effective'] = df.effective
-		T.codes_recommended[df.code]['buy_status'] = df.buy_status
-		T.codes_recommended[df.code]['sell_status'] = df.sell_status
-		T.codes_recommended[df.code]['lateral_high'] = None
-		T.codes_recommended[df.code]['support'] = None
-		T.codes_recommended[df.code]['upper'] = None
-	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')		
+		code = df.code
+		if code not in T.codes_recommended:
+			T.codes_recommended[code] = {}
+			if df.name != get_stock_name(contextInfo, df.code):
+				log(f'init_load_recommendations_from_db(): Warning! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
+			T.codes_recommended[code]['name'] = df.name
+			T.codes_recommended[code]['recommend_date'] = df.recommend_date
+			T.codes_recommended[code]['lateral_high_date'] = df.lateral_high_date
+			T.codes_recommended[code]['effective'] = df.effective
+			T.codes_recommended[code]['buy_date'] = None
+			T.codes_recommended[code]['buy_price'] = None
+			T.codes_recommended[code]['sell_date'] = None
+			T.codes_recommended[code]['sell_price'] = None
+			T.codes_recommended[code]['buy_status'] = None
+			T.codes_recommended[code]['sell_status'] = None
+			T.codes_recommended[code]['lateral_high'] = None
+			T.codes_recommended[code]['support'] = None
+			T.codes_recommended[code]['upper'] = None
+		if df.status.startswith('BUY'):
+			T.codes_recommended[code]['buy_date'] = df.date
+			T.codes_recommended[code]['buy_price'] = df.price
+			T.codes_recommended[code]['buy_status'] = df.status
+		elif df.status.startswith('SELL'):
+			T.codes_recommended[code]['sell_date'] = df.date
+			T.codes_recommended[code]['sell_price'] = df.price
+			T.codes_recommended[code]['sell_status'] = df.status
+			T.codes_recommended[code]['profit'] = df.profit
+			T.codes_recommended[code]['comment'] = df.comment
+	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
 	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{df.to_string()}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
@@ -847,18 +859,17 @@ def db_init():
 	cursor = conn.cursor()
 	cursor.execute('''
 	CREATE TABLE IF NOT EXISTS stock_status (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		code TEXT,
 		name TEXT,
+		effective TEXT,
 		recommend_date TEXT,
 		lateral_high_date TEXT,
-		buy_date TEXT,
-		buy_price REAL,
-		sell_date TEXT,
-		sell_price REAL,
-		effective TEXT,
-		buy_status TEXT,
-		sell_status TEXT,
-		PRIMARY KEY (code, recommend_date)
+		date TEXT,
+		status TEXT,
+		price REAL,
+		profit REAL,
+		comment TEXT
 	)
 	''')
 	conn.commit()
@@ -928,7 +939,7 @@ def db_update_buy_status(code, buy_status):
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET buy_status = ? WHERE code = ? AND recommend_date = ?', (buy_status, code, recommend_date))
+	cursor.execute('UPDATE stock_status SET status = ? WHERE code = ? AND recommend_date = ? AND status LIKE "BUY%"', (buy_status, code, recommend_date))
 	conn.commit()
 	conn.close()
 
@@ -936,7 +947,7 @@ def db_update_buy_date(code, buy_date):
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET buy_date = ? WHERE code = ? AND recommend_date = ?', (buy_date, code, recommend_date))
+	cursor.execute('UPDATE stock_status SET date = ? WHERE code = ? AND recommend_date = ? AND status LIKE "BUY%"', (buy_date, code, recommend_date))
 	conn.commit()
 	conn.close()
 
@@ -945,7 +956,7 @@ def db_update_buy_price(code, buy_price):
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET buy_price = ? WHERE code = ? AND recommend_date = ?', (buy_price, code, recommend_date))
+	cursor.execute('UPDATE stock_status SET price = ? WHERE code = ? AND recommend_date = ? AND status LIKE "BUY%"', (buy_price, code, recommend_date))
 	conn.commit()
 	conn.close()
 
@@ -953,7 +964,7 @@ def db_update_sell_status(code, sell_status):
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET sell_status = ? WHERE code = ? AND recommend_date = ?', (sell_status, code, recommend_date))
+	cursor.execute('UPDATE stock_status SET status = ? WHERE code = ? AND recommend_date = ? AND status LIKE "SELL%"', (sell_status, code, recommend_date))
 	conn.commit()
 	conn.close()
 
@@ -961,7 +972,7 @@ def db_update_sell_date(code, sell_date):
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET sell_date = ? WHERE code = ? AND recommend_date = ?', (sell_date, code, recommend_date))
+	cursor.execute('UPDATE stock_status SET date = ? WHERE code = ? AND recommend_date = ? AND status LIKE "SELL%"', (sell_date, code, recommend_date))
 	conn.commit()
 	conn.close()
 
@@ -970,7 +981,7 @@ def db_update_sell_price(code, sell_price):
 	recommend_date = T.codes_recommended[code]['recommend_date']
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	cursor = conn.cursor()
-	cursor.execute('UPDATE stock_status SET sell_price = ? WHERE code = ? AND recommend_date = ?', (sell_price, code, recommend_date))
+	cursor.execute('UPDATE stock_status SET price = ? WHERE code = ? AND recommend_date = ? AND status LIKE "SELL%"', (sell_price, code, recommend_date))
 	conn.commit()
 	conn.close()
 	
