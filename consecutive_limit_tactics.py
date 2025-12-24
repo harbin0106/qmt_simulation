@@ -136,6 +136,8 @@ def init_load_recommendations_from_db(contextInfo):
 			log(f'init_load_recommendations_from_db(): Warning! code {code} {T.codes_in_position[code]["name"]} in position but not in recommendations!')
 		if T.codes_recommended[code]['sell_date'] is not None:
 			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "sell_date" is not None!')
+			T.codes_recommended[code]['sell_date'] = None
+			T.codes_recommended[code]['sell_status'] = 'Error!'
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -170,8 +172,8 @@ def init_trade_parameters(contextInfo):
 	T.SLOPE = np.log(1.07)
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
-	T.CHECK_CLOSE_PRICE_TIME = '14:56:30'
-	T.TRANSACTION_CLOSE_TIME = '14:56:40'
+	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
+	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
 	T.TARGET_DATE = ''
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
