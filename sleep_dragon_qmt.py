@@ -128,14 +128,6 @@ def init_load_recommendations_from_db(contextInfo):
 			T.codes_recommended[code]['lateral_high'] = None
 			T.codes_recommended[code]['support'] = None
 			T.codes_recommended[code]['upper'] = None
-		if df.status.startswith('BUY'):
-			T.codes_recommended[code]['buy_date'] = df.date
-			T.codes_recommended[code]['buy_price'] = df.price
-			T.codes_recommended[code]['buy_status'] = df.status
-		elif df.status.startswith('SELL'):
-			T.codes_recommended[code]['sell_date'] = df.date
-			T.codes_recommended[code]['sell_price'] = df.price
-			T.codes_recommended[code]['sell_status'] = df.status
 			T.codes_recommended[code]['profit'] = df.profit
 			T.codes_recommended[code]['comment'] = df.comment
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
@@ -891,7 +883,11 @@ def db_init():
 
 def db_load_all():
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
-	df = pd.read_sql_query("SELECT * FROM stock_status", conn)
+	df = pd.read_sql_query("""
+SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.date, rec.type, rec.price, rec.profit, rec.comment
+FROM recommends r
+LEFT JOIN records rec ON r.code = rec.code
+""", conn)
 	conn.close()
 	return df
 
