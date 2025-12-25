@@ -359,7 +359,7 @@ def trade_on_handle_bar(contextInfo):
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if not T.last_current_time or T.last_current_time.get('top') != current_time[:-3]:
 		T.last_current_time['top'] = current_time[:-3]
-		log(f'\t{current_time}')
+		# log(f'\t{current_time}')
 	# if T.MARKET_OPEN_TIME <= current_time <= T.TRANSACTION_CLOSE_TIME:
 	if current_time < T.MARKET_OPEN_TIME:
 		return
@@ -370,7 +370,7 @@ def trade_on_handle_bar(contextInfo):
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
 			market_data_last_price = contextInfo.get_market_data_ex(['high'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
-			if market_data_last_price[code].empty:
+			if market_data_last_price[code].empty and False:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
 			current = market_data_last_price[code]['high'][0]
@@ -430,7 +430,7 @@ def trade_on_handle_bar(contextInfo):
 			T.BUY_AMOUNT = trade_get_cash(contextInfo) / 10
 			log(f'T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 		# 每分钟打印一次数据值
-		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3]:
+		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and False:
 			T.last_current_time[code] = current_time[:-3]
 			log(f'{code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 
@@ -526,8 +526,8 @@ def trade_on_handle_bar(contextInfo):
 			continue
 	# 打印变化的表格内容
 	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
-		df = pd.DataFrame.from_dict(T.codes_all, orient='index')
-		log(f'T.codes_all=\n{df.to_string()}')
+		# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+		log(f'T.codes_all=\n{T.codes_all}')
 		T.last_codes_all = copy.deepcopy(T.codes_all)
 
 def trade_query_info(contextInfo):
@@ -861,7 +861,7 @@ def db_insert_record(code, name, date=None, type=None, price=None, shares=None, 
 				   (code, name, date, type, round(price, 2), shares, profit, comment))
 	conn.commit()
 	conn.close()
-	log(f'db_insert_record(): 成功插入记录 - code={code}, name={name}, date={date}, type={type}, price={price:.2f}, shares={shares}, profit={profit}, comment={comment}')
+	log(f'db_insert_record(): code={code}, name={name}, date={date}, type={type}, price={price:.2f}, shares={shares}, profit={profit}, comment={comment}')
 	
 def data_init_db():
 	"""初始化股票SQLite数据库"""
