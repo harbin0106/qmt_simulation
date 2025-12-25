@@ -119,6 +119,7 @@ def init_load_recommendations_from_db(contextInfo):
 				'name': df.name,
 				'recommend_date': df.recommend_date,
 				'lateral_high_date': df.lateral_high_date,
+				'buy_date': None,
 				'price': None,
 				'type': None,
 				'lateral_high': None,
@@ -140,7 +141,11 @@ def init_load_recommendations_from_db(contextInfo):
 		if T.codes_recommended[code]['records']:
 			latest_record = max(T.codes_recommended[code]['records'], key=lambda r: r['date'])
 			T.codes_recommended[code]['type'] = latest_record['type']
-
+			# 枚举T.codes_recommended所有的code, 把它最近日期'type'为'BUY_AT_LOCAL_MIN'的'records'日期复制给T.codes_recommended[code]['buy_date']
+			buy_at_local_min_records = [r for r in T.codes_recommended[code]['records'] if r['type'] == 'BUY_AT_LOCAL_MIN']
+			if buy_at_local_min_records:
+				latest_buy_record = max(buy_at_local_min_records, key=lambda r: r['date'])
+				T.codes_recommended[code]['buy_date'] = latest_buy_record['date']
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
 	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
@@ -396,6 +401,7 @@ def trade_on_handle_bar(contextInfo):
 		highs = market_data_120[code]['high']
 		avg_amount_120 = amounts.mean()
 		local_max = max(highs[-3:-1])
+		local_min = min(lows[-3:-1])
 		# 计算成交量相对量比
 		rolling_max = pd.Series(amounts).rolling(window=20).max().values
 		rolling_min = pd.Series(amounts).rolling(window=20).min().values
