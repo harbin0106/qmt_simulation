@@ -155,7 +155,7 @@ def init_load_recommendations_from_db(contextInfo):
 		if code not in T.codes_recommended:
 			log(f'init_load_recommendations_from_db(): Warning! code {code} {T.codes_in_position[code]["name"]} in position but not in recommendations!')
 			continue
-		if T.codes_recommended[code]['type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_1.15x_BUY']:
+		if T.codes_recommended[code]['type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_1.15_STEP_0', 'SELL_AT_1.15_STEP_1', 'SELL_AT_1.15_STEP_2', 'SELL_AT_1.15_STEP_3']:
 			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "type" is invalid! {T.codes_recommended[code]["type"]}')
 			T.codes_recommended[code]['type'] = 'BUY_AT_LOCAL_MIN'
 
@@ -466,6 +466,38 @@ def trade_on_handle_bar(contextInfo):
 				T.codes_all[code]['buy_price'] = current
 				log(f'{current_time} BUY_AT_STEP_3: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, ma5_derivative_normalized[-1]={ma5_derivative_normalized[-1]:.3f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}')
 				continue
+		# 卖出: 当日出现高于BUY_AT_STEP_x买入价的1.15倍时, 卖出此份股票. buy_price要从T.codes_all[code]['records']里枚举, 还包括当日买入的T.codes_all[code]['buy_price']. 卖出时, 用SELL_AT_1.15_STEP_x标记对应step的x
+		if T.codes_all[code]['type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3']:
+			# 从records中枚举买入记录的价格
+			for record in T.codes_all[code]['records']:
+				if record['type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3'] and record['price'] is not None:
+					if current >= 1.15 * record['price'] and record['type'] == 'BUY_AT_STEP_1':
+						T.codes_all[code]['type'] = 'SELL_AT_1.15x_STEP_1'
+						T.codes_all[code]['price'] = current
+						break
+					if current >= 1.15 * record['price'] and record['type'] == 'BUY_AT_STEP_2':
+						T.codes_all[code]['type'] = 'SELL_AT_1.15x_STEP_2'
+						T.codes_all[code]['price'] = current
+						break
+					if current >= 1.15 * record['price'] and record['type'] == 'BUY_AT_STEP_3':
+						T.codes_all[code]['type'] = 'SELL_AT_1.15x_STEP_3'
+						T.codes_all[code]['price'] = current
+						break
+			# 包括当日买入的价格
+			if 'price' in T.codes_all[code] and T.codes_all[code]['price'] is not None:
+				if current >= 1.15 * T.codes_all[code]['price'] and T.codes_all[code]['type'] == 'BUY_AT_STEP_1':
+					T.codes_all[code]['type'] = 'SELL_AT_1.15x_STEP_1'
+					T.codes_all[code]['price'] = current
+					break
+				if current >= 1.15 * T.codes_all[code]['price'] and T.codes_all[code]['type'] == 'BUY_AT_STEP_2':
+					T.codes_all[code]['type'] = 'SELL_AT_1.15x_STEP_2'
+					T.codes_all[code]['price'] = current
+					break
+				if current >= 1.15 * T.codes_all[code]['price'] and T.codes_all[code]['type'] == 'BUY_AT_STEP_3':
+					T.codes_all[code]['type'] = 'SELL_AT_1.15x_STEP_3'
+					T.codes_all[code]['price'] = current
+					break
+
 		# 卖出. 如果买入日期为空, 或者买入日期是今日, 或者买入日期是明日, 或者卖出日期不为空, 跳过
 		if T.codes_all[code]['buy_date'] is None or T.codes_all[code]['buy_date'] >= T.CURRENT_DATE or T.codes_all[code]['sell_date'] is not None:
 			continue
@@ -505,13 +537,13 @@ def trade_on_handle_bar(contextInfo):
 			continue
 
 	# 卖出股票
-	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('type') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CLOSE_ABOVE_UPPER', 'SELL_AT_TIMEOUT'] and T.codes_all[code]['sell_date'] is None)
+	sell_count = sum(1 for code in T.codes_all if T.codes_all[code].get('type') in ['SELL_AT_CLOSE_BELOW_BREAKOUT', 'SELL_AT_CLOSE_BELOW_SUPPORT', 'SELL_AT_OPEN_BELOW_BREAKOUT', 'SELL_AT_HIGH_AMOUNT', 'SELL_AT_CLOSE_ABOVE_UPPER', 'SELL_AT_TIMEOUT', 'SELL_AT_1.15_STEP_0', 'SELL_AT_1.15_STEP_1', 'SELL_AT_1.15_STEP_2', 'SELL_AT_1.15_STEP_3'] and T.codes_all[code]['sell_date'] is None)
 	if sell_count != 0 and current_time < T.MARKET_CLOSE_TIME:
 		for code in list(set(T.codes_all.keys())):
 			# 如果卖出日期不为空, 或者卖出状态为空, 跳过
 			if T.codes_all[code]['sell_date'] is not None or T.codes_all[code]['type'] is None:
 				continue
-			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['type'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['type'] == 'SELL_AT_CLOSE_BELOW_SUPPORT' or T.codes_all[code]['type'] == 'SELL_AT_TIMEOUT'):
+			if current_time >= T.TRANSACTION_CLOSE_TIME and (T.codes_all[code]['type'] == 'SELL_AT_CLOSE_BELOW_BREAKOUT' or T.codes_all[code]['type'] == 'SELL_AT_CLOSE_BELOW_SUPPORT' or T.codes_all[code]['type'] == 'SELL_AT_TIMEOUT' or T.codes_all[code]['type'].startswith('SELL_AT_1.15_STEP_')):
 				trade_sell_stock(contextInfo, code, T.codes_all[code]['type'])
 				T.codes_all[code]['sell_date'] = T.CURRENT_DATE
 				db_insert_status_record(code, date=T.codes_all[code]['sell_date'], status=T.codes_all[code]['type'], price=T.codes_all[code]['sell_price'])
