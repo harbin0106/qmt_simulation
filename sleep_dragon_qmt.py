@@ -139,9 +139,24 @@ def init_load_recommendations_from_db(contextInfo):
 			'comment': df.comment
 		}
 		T.codes_recommended[code]['records'].append(record)
-	# 枚举T.codes_recommended所有的code, 把它的最近日期(非T.CURRENT_DATE)'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 
+
 	for code in T.codes_recommended:
+		# 枚举T.codes_recommended所有的code, 把它的最近日期(非T.CURRENT_DATE)'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 还要添加一个逻辑, 相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消(x必须相同), 表示已经发生了中和交易, 需要去除. 剩下的记录再按照前面所述的逻辑复制给'last_type'和'last_price'.
 		records = T.codes_recommended[code]['records']
+		# 过滤相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消的记录
+		filtered_records = []
+		i = 0
+		while i < len(records):
+			if i + 1 < len(records) and records[i]['type'].startswith('BUY_AT_STEP_') and records[i+1]['type'].startswith('SELL_AT_STEP_'):
+				buy_step = records[i]['type'].split('_')[-1]
+				sell_step = records[i+1]['type'].split('_')[-1]
+				if buy_step == sell_step:
+					i += 2
+					continue
+			filtered_records.append(records[i])
+			i += 1
+		T.codes_recommended[code]['records'] = filtered_records
+		records = filtered_records
 		if records:
 			# 非T.CURRENT_DATE的记录
 			non_today_records = [r for r in records if r['date'] != T.CURRENT_DATE]
@@ -239,7 +254,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251217'
+	T.TARGET_DATE = '20251223'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -438,7 +453,7 @@ def trade_on_handle_bar(contextInfo):
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
-			current = market_data_last_price[code]['low'][0]
+			current = market_data_last_price[code]['high'][0]
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = round(market_data_last_price[code]['lastPrice'][0], 2)
@@ -524,7 +539,7 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
 			continue
 		# 卖出: 持仓超过3天. 从T.codes_all[code]['last_buy_date']到T.CURRENT_DATE超过3个交易日
-		if T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3'] and T.codes_all[code]['last_buy_date'] is not None and len(contextInfo.get_trading_dates(code, T.codes_all[code]['last_buy_date'], T.CURRENT_DATE, -1, '1d')) > 4:
+		if current_time >= '09:36:00' and T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3'] and T.codes_all[code]['last_buy_date'] is not None and len(contextInfo.get_trading_dates(code, T.codes_all[code]['last_buy_date'], T.CURRENT_DATE, -1, '1d')) > 3:
 			T.codes_all[code]['type'] = 'SELL_AT_TIMEOUT'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
