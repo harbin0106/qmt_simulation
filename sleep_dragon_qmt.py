@@ -825,8 +825,7 @@ def db_init():
 		price REAL,
 		shares REAL,
 		profit REAL,
-		comment TEXT,
-		FOREIGN KEY (code) REFERENCES recommends(code)
+		comment TEXT
 	)
 	''')
 	conn.commit()
