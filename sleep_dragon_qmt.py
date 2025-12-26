@@ -164,18 +164,32 @@ def init_load_recommendations_from_db(contextInfo):
 				latest_today = max(today_records, key=lambda r: r['id'])
 				T.codes_recommended[code]['type'] = latest_today['type']
 				T.codes_recommended[code]['price'] = latest_today['price']
-		# 枚举T.codes_recommended所有的code, 把它最近日期'type'为'BUY_AT_LOCAL_MIN'的'records'日期复制给T.codes_recommended[code]['last_buy_date']
-		buy_at_local_min_records = [r for r in records if r['type'] == 'BUY_AT_LOCAL_MIN']
-		if buy_at_local_min_records:
+		# 枚举T.codes_recommended所有的code, 把它最近日期'type'为'BUY_AT_LOCAL_MIN'且'type'为'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'的日期早于'BUY_AT_LOCAL_MIN'的日期的'records'的日期复制给T.codes_recommended[code]['last_buy_date']. 也就说, 'last_buy_date'表示最近一次买入且没有卖出的日期. 如果该股票已经卖出了, 最新日期'type'会变成'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'或者'SELL_AT_TIMEOUT'. 此时'last_buy_date'为None.
+		buy_records = [r for r in records if r['type'] == 'BUY_AT_LOCAL_MIN']
+		if buy_records:
 			# 按日期分组，取每个日期 id 最大的
 			date_groups_buy = {}
-			for r in buy_at_local_min_records:
+			for r in buy_records:
 				d = r['date']
 				if d not in date_groups_buy or r['id'] > date_groups_buy[d]['id']:
 					date_groups_buy[d] = r
-			# 从这些中取日期最新的
+			# 取日期最新的买入记录
 			latest_buy_date = max(date_groups_buy.keys())
-			T.codes_recommended[code]['last_buy_date'] = latest_buy_date
+			latest_buy_record = date_groups_buy[latest_buy_date]
+			# 检查是否有卖出记录在买入之后
+			sell_types = ['SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0', 'SELL_AT_TIMEOUT']
+			has_sell_after = False
+			for r in records:
+				if r['type'] in sell_types:
+					if r['date'] > latest_buy_date or (r['date'] == latest_buy_date and r['id'] > latest_buy_record['id']):
+						has_sell_after = True
+						break
+			if has_sell_after:
+				T.codes_recommended[code]['last_buy_date'] = None
+			else:
+				T.codes_recommended[code]['last_buy_date'] = latest_buy_date
+		else:
+			T.codes_recommended[code]['last_buy_date'] = None
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
 	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
@@ -424,7 +438,7 @@ def trade_on_handle_bar(contextInfo):
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
-			current = market_data_last_price[code]['high'][0]
+			current = market_data_last_price[code]['low'][0]
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = round(market_data_last_price[code]['lastPrice'][0], 2)
