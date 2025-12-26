@@ -130,6 +130,7 @@ def init_load_recommendations_from_db(contextInfo):
 			if df.name != get_stock_name(contextInfo, df.code):
 				log(f'init_load_recommendations_from_db(): Warning! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
 		record = {
+			'id': df.id,
 			'date': df.date,
 			'type': df.type,
 			'price': df.price,
@@ -138,17 +139,43 @@ def init_load_recommendations_from_db(contextInfo):
 			'comment': df.comment
 		}
 		T.codes_recommended[code]['records'].append(record)
-	# 枚举T.codes_recommended所有的code, 把它的最近日期'records'的内容复制给T.codes_rocommended[code]['type'].
+	# 枚举T.codes_recommended所有的code, 把它的最近日期(非T.CURRENT_DATE)'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 
 	for code in T.codes_recommended:
-		if T.codes_recommended[code]['records']:
-			latest_record = max(T.codes_recommended[code]['records'], key=lambda r: r['date'])
-			T.codes_recommended[code]['last_type'] = latest_record['type']
-			T.codes_recommended[code]['last_price'] = latest_record['price']
-			# 枚举T.codes_recommended所有的code, 把它最近日期'type'为'BUY_AT_LOCAL_MIN'的'records'日期复制给T.codes_recommended[code]['last_buy_date']
-			buy_at_local_min_records = [r for r in T.codes_recommended[code]['records'] if r['type'] == 'BUY_AT_LOCAL_MIN']
-			if buy_at_local_min_records:
-				latest_buy_record = max(buy_at_local_min_records, key=lambda r: r['date'])
-				T.codes_recommended[code]['last_buy_date'] = latest_buy_record['date']
+		records = T.codes_recommended[code]['records']
+		if records:
+			# 非T.CURRENT_DATE的记录
+			non_today_records = [r for r in records if r['date'] != T.CURRENT_DATE]
+			if non_today_records:
+				# 按日期分组，取每个日期 id 最大的
+				date_groups = {}
+				for r in non_today_records:
+					d = r['date']
+					if d not in date_groups or r['id'] > date_groups[d]['id']:
+						date_groups[d] = r
+				# 从这些中取日期最新的
+				latest_date = max(date_groups.keys())
+				latest_non_today = date_groups[latest_date]
+				T.codes_recommended[code]['last_type'] = latest_non_today['type']
+				T.codes_recommended[code]['last_price'] = latest_non_today['price']
+			# T.CURRENT_DATE的记录
+			today_records = [r for r in records if r['date'] == T.CURRENT_DATE]
+			if today_records:
+				# 取 id 最大的
+				latest_today = max(today_records, key=lambda r: r['id'])
+				T.codes_recommended[code]['type'] = latest_today['type']
+				T.codes_recommended[code]['price'] = latest_today['price']
+		# 枚举T.codes_recommended所有的code, 把它最近日期'type'为'BUY_AT_LOCAL_MIN'的'records'日期复制给T.codes_recommended[code]['last_buy_date']
+		buy_at_local_min_records = [r for r in records if r['type'] == 'BUY_AT_LOCAL_MIN']
+		if buy_at_local_min_records:
+			# 按日期分组，取每个日期 id 最大的
+			date_groups_buy = {}
+			for r in buy_at_local_min_records:
+				d = r['date']
+				if d not in date_groups_buy or r['id'] > date_groups_buy[d]['id']:
+					date_groups_buy[d] = r
+			# 从这些中取日期最新的
+			latest_buy_date = max(date_groups_buy.keys())
+			T.codes_recommended[code]['last_buy_date'] = latest_buy_date
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
 	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
@@ -198,7 +225,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251219'
+	T.TARGET_DATE = '20251217'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -272,7 +299,7 @@ def after_init(contextInfo):
 	# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
 	# log(f'after_init(): T.codes_all=\n{df.to_string()}')
 	# 计算lateral_high_date是否正确
-	# trade_refine_codes_all(contextInfo)
+	trade_refine_codes_all(contextInfo)
 	# trade_get_recommendations(contextInfo)
 	open_log_file(contextInfo)
 
@@ -286,9 +313,18 @@ def trade_refine_codes_all(contextInfo):
 	filtered_codes_all = {}
 	for code in list(set(T.codes_all.keys())):
 		market_data_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=start_date, end_time=T.codes_all[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
+		if market_data_high is None:
+			log(f'trade_refine_codes_all(): Error! market_data_high is None! {code}, {T.codes_all[code]["name"]}')
+			continue
 		# 获取当前交易日和昨日的收盘价
 		market_data_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', end_time=T.CURRENT_DATE, count=2, dividend_type='front', fill_data=False, subscribe=True)
+		if market_data_close is None:
+			log(f'trade_refine_codes_all(): Error! market_data_close is None! {code}, {T.codes_all[code]["name"]}')
+			continue
 		highs = market_data_high[code]['high'].astype(float)
+		if highs.empty:
+			log(f'trade_refine_codes_all(): Error! highs.empty! {code}, {T.codes_all[code]["name"]}')
+			continue
 		closes= market_data_close[code]['close'].astype(float)
 		lateral_high_date = highs.idxmax()
 		lateral_high = max(highs)
@@ -296,8 +332,23 @@ def trade_refine_codes_all(contextInfo):
 			log(f'trade_refine_codes_all(): code={code}, name={T.codes_all[code]["name"]}. Error! Invalid lateral_high_date! lateral_high_date={lateral_high_date}, db={T.codes_all[code]["lateral_high_date"]}')
 			continue
 		# 过滤掉还没有接近水平突破线且买入日期, 卖出日期为空的股票. closes[0]为昨日, closes[1]为今日
-		if closes[0] < lateral_high * 0.9 and T.codes_all[code]['last_day'] is None and T.codes_all[code]['sell_date'] is None:
-			log(f'trade_refine_codes_all(): {code} {T.codes_all[code]["name"]} is removed from T.codes_all. closes[0]={closes[0]:.2f}')
+		# if closes[0] < lateral_high * 0.9 and T.codes_all[code]['last_day'] is None and T.codes_all[code]['sell_date'] is None:
+		# 	log(f'trade_refine_codes_all(): {code} {T.codes_all[code]["name"]} is removed from T.codes_all. closes[0]={closes[0]:.2f}')
+		# 	continue
+		# 过滤掉从昨日起前面20个交易日最高价没有超过lateral_high的股票
+		trading_dates = contextInfo.get_trading_dates(code, '', T.CURRENT_DATE, 21, '1d')
+		if len(trading_dates) < 21:
+			log(f'trade_refine_codes_all(): Error! 无法获取 {code} {T.codes_all[code]["name"]} 的足够交易日数据! trading_dates={trading_dates}')
+			continue
+		# 从昨日起前20个交易日：trading_dates[0] 到 trading_dates[19]
+		market_data_high_20 = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=trading_dates[0], end_time=trading_dates[19], count=-1, dividend_type='front', fill_data=False, subscribe=True)
+		if code not in market_data_high_20 or market_data_high_20[code].empty:
+			log(f'trade_refine_codes_all(): Error! 无法获取 {code} {T.codes_all[code]["name"]} 的20日最高价数据!')
+			continue
+		highs_20 = market_data_high_20[code]['high'].astype(float)
+		max_high_20 = max(highs_20)
+		if max_high_20 <= lateral_high:
+			log(f'trade_refine_codes_all(): {code} {T.codes_all[code]["name"]} is removed from T.codes_all. max_high_20={max_high_20:.2f} <= lateral_high={lateral_high:.2f}')
 			continue
 		# log(f'trade_refine_codes_all(): code={code}, name={T.codes_all[code]["name"]}, lateral_high={lateral_high:.2f}, closes[-1]={closes[-1]}')
 		filtered_codes_all[code] = T.codes_all[code]
@@ -359,7 +410,7 @@ def trade_on_handle_bar(contextInfo):
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if not T.last_current_time or T.last_current_time.get('top') != current_time[:-3]:
 		T.last_current_time['top'] = current_time[:-3]
-		# log(f'\t{current_time}')
+		log(f'\t{current_time}')
 	# if T.MARKET_OPEN_TIME <= current_time <= T.TRANSACTION_CLOSE_TIME:
 	if current_time < T.MARKET_OPEN_TIME:
 		return
@@ -368,7 +419,7 @@ def trade_on_handle_bar(contextInfo):
 		# 获取当前的最新价格
 		if T.TARGET_DATE != '':
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
-			market_data_last_price = contextInfo.get_market_data_ex(['high'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_last_price = contextInfo.get_market_data_ex(['high', 'low'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
@@ -438,7 +489,7 @@ def trade_on_handle_bar(contextInfo):
 			T.BUY_AMOUNT = cash / 10
 			log(f'T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 		# 每分钟打印一次数据值
-		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and False:
+		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and True:
 			T.last_current_time[code] = current_time[:-3]
 			log(f'{code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 
@@ -489,7 +540,7 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
 			continue
 		# 卖出: 当日出现高于BUY_AT_STEP_x买入价的1.15倍时, 卖出此份股票. buy_price要从T.codes_all[code]['records']里枚举, 还包括当日买入的T.codes_all[code]['price']. 卖出时, 用SELL_AT_1.15_STEP_x标记对应step的x
-		if (T.codes_all[code]['type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes_all[code]['price']) or (T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes_all[code]['last_price']):
+		if (T.codes_all[code]['type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes_all[code]['price'] and False) or (T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes_all[code]['last_price']):
 			T.codes_all[code]['type'] = 'SELL_AT_STEP_0'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
@@ -834,7 +885,7 @@ def db_init():
 def db_load_all():
 	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
 	df = pd.read_sql_query("""
-SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
+SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
 FROM recommends r
 LEFT JOIN records rec ON r.code = rec.code
 """, conn)
