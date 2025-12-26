@@ -510,14 +510,7 @@ def trade_on_handle_bar(contextInfo):
 			trade_sell_stock(contextInfo, code, T.codes_all[code]['type'])
 			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
 			continue
-		if T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes_all[code]['last_price']:
-			T.codes_all[code]['type'] = 'SELL_AT_STEP_3'
-			T.codes_all[code]['price'] = current
-			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			trade_sell_stock(contextInfo, code, T.codes_all[code]['type'])
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
-			continue
-		if T.codes_all[code]['type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes_all[code]['price']:
+		if (T.codes_all[code]['type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes_all[code]['price']) or (T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes_all[code]['last_price']):
 			T.codes_all[code]['type'] = 'SELL_AT_STEP_3'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
