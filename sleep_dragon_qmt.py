@@ -198,7 +198,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251225'
+	T.TARGET_DATE = '20251223'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -370,7 +370,7 @@ def trade_on_handle_bar(contextInfo):
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
 			market_data_last_price = contextInfo.get_market_data_ex(['low'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
-			if market_data_last_price[code].empty and False:
+			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
 			current = market_data_last_price[code]['low'][0]
@@ -401,12 +401,16 @@ def trade_on_handle_bar(contextInfo):
 		opens = market_data_120[code]['open']
 		highs = market_data_120[code]['high']
 		avg_amount_120 = amounts.mean()
-		local_max = max(highs[-3:-1])
 		# local_min是从T.codes_all[code]['last_buy_date']到当日lows值的最低值
 		buy_date = T.codes_all[code].get('last_buy_date')
+		if buy_date and buy_date in highs.index:
+			idx = highs.index.get_loc(buy_date)
+			local_max = max(highs[idx - 2: idx])
+		else:
+			local_max = max(highs[-3 : -1])
 		if buy_date and buy_date in lows.index:
 			idx = lows.index.get_loc(buy_date)
-			local_min = min(lows[idx:])
+			local_min = min(lows[idx : idx + 1])
 		else:
 			local_min = 0
 		# 计算成交量相对量比
@@ -470,14 +474,14 @@ def trade_on_handle_bar(contextInfo):
 			trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
 			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
 			continue
-		if T.codes_all[code]['type'] is None and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_1'] and current < 0.69 * local_max:
+		if T.codes_all[code]['type'] is None and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_1'] and current < 0.70 * local_max:
 			T.codes_all[code]['type'] = 'BUY_AT_STEP_2'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
 			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
 			continue
-		if T.codes_all[code]['type'] is None and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_2'] and current < 0.59 * local_max:
+		if T.codes_all[code]['type'] is None and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_2'] and current < 0.61 * local_max:
 			T.codes_all[code]['type'] = 'BUY_AT_STEP_3'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
