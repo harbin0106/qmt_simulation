@@ -266,7 +266,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251226'
+	T.TARGET_DATE = '20251202'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -539,8 +539,10 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['type'] = 'BUY_AT_LOCAL_MIN'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
+			vol = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
+			if T.TARGET_DATE != '':
+				vol = T.BUY_AMOUNT / T.codes_all[code]['price'] // 100 * 100
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=vol)
 			continue
 		# 卖出：最高价大于1.16倍的local_min (从buy_date到当日)
 		if T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3'] and local_min != 0 and current >= 1.16 * local_min:
@@ -563,22 +565,28 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['type'] = 'BUY_AT_STEP_1'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
+			vol = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
+			if T.TARGET_DATE != '':
+				vol = T.BUY_AMOUNT / T.codes_all[code]['price'] // 100 * 100
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=vol)
 			continue
 		if T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_1'] and current < 0.70 * local_max:
 			T.codes_all[code]['type'] = 'BUY_AT_STEP_2'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
+			vol = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
+			if T.TARGET_DATE != '':
+				vol = T.BUY_AMOUNT / T.codes_all[code]['price'] // 100 * 100
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=vol)
 			continue
 		if T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_2'] and current < 0.61 * local_max:
 			T.codes_all[code]['type'] = 'BUY_AT_STEP_3'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
+			vol = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes_all[code]['type'])
+			if T.TARGET_DATE != '':
+				vol = T.BUY_AMOUNT / T.codes_all[code]['price'] // 100 * 100
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=vol)
 			continue
 		# 卖出: 当日出现高于BUY_AT_STEP_x买入价的1.15倍时, 卖出此份股票. buy_price要从T.codes_all[code]['records']里枚举, 还包括当日买入的T.codes_all[code]['price']. 卖出时, 用SELL_AT_1.15_STEP_x标记对应step的x
 		if (T.codes_all[code]['type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes_all[code]['price'] and False) or (T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes_all[code]['last_price']):
@@ -746,14 +754,14 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 	if code not in market_data or market_data[code].empty:
 		log(f'trade_buy_stock_by_amount(): Error! 无法获取{code} {T.codes_all[code]["name"]}的最新股价!')
-		return
+		return 0
 	last_price = market_data[code]['lastPrice'][0]
 	# log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
 	# 计算买入股数
 	volume = int(buy_amount / last_price // 100) * 100
 	if volume < 100:
 		log(f'trade_buy_stock_by_amount(): Error! 买入股数不足! 计算得买入 {volume} 股，少于100股，跳过!')
-		return
+		return 0
 	# 计算买入金额
 	actual_buy_amount = volume * last_price
 	total_cost = actual_buy_amount + trade_get_fee(contextInfo, actual_buy_amount)
@@ -761,18 +769,18 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
 	available_cash = trade_get_cash(contextInfo)
 	if available_cash is None:
 		log(f'trade_buy_stock_by_amount(): Error! available_cash is None!')
-		return
+		return 0
 	while total_cost > available_cash and volume >= 200:
 		volume -= 100
 		actual_buy_amount = volume * last_price
 		total_cost = actual_buy_amount + trade_get_fee(contextInfo, actual_buy_amount)
 	if volume < 100 or total_cost > available_cash:
 		log(f'trade_buy_stock_by_amount(): Error! 可用资金不足! 买入 {volume} 股需要总成本{total_cost:.2f} 元，超过可用资金 {available_cash:.2f} 元，跳过!')
-		return
-
+		return 0
 	# 使用passorder进行指定价格last_price买入，按股数
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, last_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_buy_stock_by_amount(): {code} {T.codes_all[code]["name"]} 指定价格{last_price:.2f} 买入 {volume} 股，预计成交金额 {actual_buy_amount:.2f} 元')
+	return volume
 
 def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
 	log(f'trade_buy_stock_by_volume(): {code} {T.codes_all[code]["name"]}, volume={volume} 股')
