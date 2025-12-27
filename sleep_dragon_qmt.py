@@ -130,16 +130,17 @@ def init_load_recommendations_from_db(contextInfo):
 			}
 			if df.name != get_stock_name(contextInfo, df.code):
 				log(f'init_load_recommendations_from_db(): Warning! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
-		record = {
-			'id': df.id,
-			'date': df.date,
-			'type': df.type,
-			'price': df.price,
-			'shares': df.shares,
-			'profit': df.profit,
-			'comment': df.comment
-		}
-		T.codes_recommended[code]['records'].append(record)
+		if df.date is not None:
+			record = {
+				'id': df.id,
+				'date': df.date,
+				'type': df.type,
+				'price': df.price,
+				'shares': df.shares,
+				'profit': df.profit,
+				'comment': df.comment
+			}
+			T.codes_recommended[code]['records'].append(record)
 
 	for code in T.codes_recommended:
 		# 枚举T.codes_recommended所有的code, 把它的最近日期(非T.CURRENT_DATE)'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 还要添加一个逻辑, 相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消(x必须相同), 表示已经发生了中和交易, 需要去除. 剩下的记录再按照前面所述的逻辑复制给'last_type'和'last_price'.
@@ -158,6 +159,24 @@ def init_load_recommendations_from_db(contextInfo):
 			i += 1
 		T.codes_recommended[code]['records'] = filtered_records
 		records = filtered_records
+		# 对于T.codes_recommended里每个code, 去掉T.codes_recommended里'type'为'BUY_AT_LOCAL_MIN'的日期以前的记录. 当有多个'type'为'BUY_AT_LOCAL_MIN'的日期时, 以最近的日期为准. 去掉以'type'为'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'为最近日期结尾的所有记录. 当没有记录时, 保留code, 仅把T.codes_recommended[code]['records']置空
+		if records:
+			# 找到所有 'BUY_AT_LOCAL_MIN' 的记录
+			buy_local_min_records = [r for r in records if r['type'] == 'BUY_AT_LOCAL_MIN']
+			if buy_local_min_records:
+				# 取最近的日期
+				latest_buy_date = max(r['date'] for r in buy_local_min_records)
+				# 过滤记录，只保留 >= latest_buy_date 的
+				records = [r for r in records if r['date'] >= latest_buy_date]
+			# 检查最近的记录
+			if records:
+				latest_record = max(records, key=lambda r: (r['date'], r['id']))
+				if latest_record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0', 'SELL_AT_TIMEOUT']:
+					records = []
+		else:
+			records = []
+		T.codes_recommended[code]['records'] = records
+
 		if records:
 			# 非T.CURRENT_DATE的记录
 			non_today_records = [r for r in records if r['date'] != T.CURRENT_DATE]
@@ -266,7 +285,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251202'
+	T.TARGET_DATE = '20251212'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -440,6 +459,44 @@ def trade_get_cash(contextInfo):
 		log(f'after_init(): Error! 账号未登录! 请检查!')
 		return
 	return float(account[0].m_dAvailable)	
+
+def trade_get_sell_shares(contextInfo, code, sell_type):
+	# 获取卖出股票时的股数. 当type是'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'时, 是卖出所有当前持仓股票, 包括'BUY_AT_LOCAL_MIN', 和'BUY_AT_STEP_x'所有未卖出股票(后面有'SELL_AT_STEP_x'的记录). 当type是'SELL_AT_STEP_x'时, 表示卖出'BUY_AT_STEP_x'所对应的股数. 查找规则: 从T.codes_all[code]['records']里, 从不为空的T.codes_all[code]['last_buy_date']里对应的record开始, 向后遍历所有的record, 去掉已经卖出记录(例如BUY_AT_STEP_x和与其对应的SELL_AT_STEP_x)所对应的股数(因为BUY_AT_STEP_x所对应的股数已经被SELL_AT_STEP_x卖出), 按照前述规则返回对应的股数. 注意: records里BUY_AT_STEP_x和SELL_AT_STEP_x的股数是相同且此时BUY_AT_STEP_x对应的股数不能计算在内. BUY_AT_STEP_x和SELL_AT_STEP_x的记录可能没有挨在一起, 中间可能会有其它类型记录. 
+	last_buy_date = T.codes_all[code]['last_buy_date']
+	if not last_buy_date:
+		return 0
+	records = T.codes_all[code]['records']
+	# 找到从 last_buy_date 开始的 records
+	start_idx = next((i for i, r in enumerate(records) if r['date'] >= last_buy_date), None)
+	if start_idx is None:
+		return 0
+	sub_records = records[start_idx:]
+	# 去掉已经卖出记录所对应的股数
+	filtered_records = []
+	i = 0
+	while i < len(sub_records):
+		if i + 1 < len(sub_records) and sub_records[i]['type'].startswith('BUY_AT_STEP_') and sub_records[i+1]['type'].startswith('SELL_AT_STEP_'):
+			buy_step = sub_records[i]['type'].split('_')[-1]
+			sell_step = sub_records[i+1]['type'].split('_')[-1]
+			if buy_step == sell_step:
+				i += 2
+				continue
+		filtered_records.append(sub_records[i])
+		i += 1
+	if sell_type in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
+		total_shares = 0
+		for r in filtered_records:
+			if r['type'].startswith('BUY_AT_'):
+				total_shares += r.get('shares', 0) or 0
+		return total_shares
+	elif sell_type.startswith('SELL_AT_STEP_'):
+		step = sell_type.split('_')[-1]
+		for r in filtered_records:
+			if r['type'] == f'BUY_AT_STEP_{step}':
+				return r.get('shares', 0) or 0
+		return 0
+	else:
+		return 0
 
 def trade_on_handle_bar(contextInfo):
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
