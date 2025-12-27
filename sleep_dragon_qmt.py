@@ -8,6 +8,7 @@ import time
 import os
 import copy
 import talib as ta
+from collections import defaultdict
 # Global trade variables
 class T():
 	pass
@@ -143,23 +144,8 @@ def init_load_recommendations_from_db(contextInfo):
 			T.codes_recommended[code]['records'].append(record)
 
 	for code in T.codes_recommended:
-		# 枚举T.codes_recommended所有的code, 把它的最近日期(非T.CURRENT_DATE)'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 还要添加一个逻辑, 相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消(x必须相同), 表示已经发生了中和交易, 需要去除. 剩下的记录再按照前面所述的逻辑复制给'last_type'和'last_price'.
-		records = T.codes_recommended[code]['records']
-		# 过滤相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消的记录
-		filtered_records = []
-		i = 0
-		while i < len(records):
-			if i + 1 < len(records) and records[i]['type'].startswith('BUY_AT_STEP_') and records[i+1]['type'].startswith('SELL_AT_STEP_'):
-				buy_step = records[i]['type'].split('_')[-1]
-				sell_step = records[i+1]['type'].split('_')[-1]
-				if buy_step == sell_step:
-					i += 2
-					continue
-			filtered_records.append(records[i])
-			i += 1
-		T.codes_recommended[code]['records'] = filtered_records
-		records = filtered_records
 		# 对于T.codes_recommended里每个code, 去掉T.codes_recommended里'type'为'BUY_AT_LOCAL_MIN'的日期以前的记录. 当有多个'type'为'BUY_AT_LOCAL_MIN'的日期时, 以最近的日期为准. 去掉以'type'为'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'为最近日期结尾的所有记录. 当没有记录时, 保留code, 仅把T.codes_recommended[code]['records']置空
+		records = T.codes_recommended[code]['records']
 		if records:
 			# 找到所有 'BUY_AT_LOCAL_MIN' 的记录
 			buy_local_min_records = [r for r in records if r['type'] == 'BUY_AT_LOCAL_MIN']
@@ -176,6 +162,30 @@ def init_load_recommendations_from_db(contextInfo):
 		else:
 			records = []
 		T.codes_recommended[code]['records'] = records
+		
+		# 枚举T.codes_recommended所有的code, 把它的最近日期非T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 还要添加一个逻辑, 相邻和非相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消(x必须相同), 表示已经发生了完整买卖交易, 需要去除, 并覆盖T.codes_recommended[code]['records']. 剩下的记录再按照前面所述的逻辑复制给'last_type'和'last_price'.
+		records = T.codes_recommended[code]['records']
+		# 过滤相邻和非相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消的记录
+		buy_dict = defaultdict(list)
+		sell_dict = defaultdict(list)
+		for r in records:
+			if r['type'].startswith('BUY_AT_STEP_'):
+				x = r['type'].split('_')[-1]
+				buy_dict[x].append(r)
+			elif r['type'].startswith('SELL_AT_STEP_'):
+				x = r['type'].split('_')[-1]
+				sell_dict[x].append(r)
+		removed_ids = set()
+		for x in buy_dict:
+			buy_list = sorted(buy_dict[x], key=lambda r: r['id'])
+			sell_list = sorted(sell_dict[x], key=lambda r: r['id'])
+			min_len = min(len(buy_list), len(sell_list))
+			for i in range(min_len):
+				removed_ids.add(buy_list[i]['id'])
+				removed_ids.add(sell_list[i]['id'])
+		filtered_records = [r for r in records if r['id'] not in removed_ids]
+		T.codes_recommended[code]['records'] = filtered_records
+		records = filtered_records
 
 		if records:
 			# 非T.CURRENT_DATE的记录
@@ -285,7 +295,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251212'
+	T.TARGET_DATE = '20251215'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
