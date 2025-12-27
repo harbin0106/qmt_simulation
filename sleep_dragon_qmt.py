@@ -496,6 +496,34 @@ def trade_get_sell_shares(contextInfo, code, sell_type):
 		log(f'trade_get_sell_shares(): {code} {T.codes_all[code]["name"]} sell_type={sell_type} Error! Unknown sell_type!')
 		return 0
 
+def trade_get_average_price(contextInfo, code, sell_type):
+	# 获取要卖出股票的平均成本价格. 当sell_type是'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT'时, 是卖出所有当前持仓股票, 包括'BUY_AT_LOCAL_MIN', 和'BUY_AT_STEP_x'所有未卖出股票. 当sell_type是'SELL_AT_STEP_x'时(x不为0), 表示卖出'BUY_AT_STEP_x'所对应的股数. 当sell_type 'SELL_AT_STEP_x'的x为0时, 表示卖出'BUY_AT_LOCAL_MIN'所对应的股数. T.codes_all[code]['records']已经在初始化时过滤了无关记录. 查找规则: 从T.codes_all[code]['records']里, 按照前述规则对应的价格. 当有多条记录时, 根据股数计算平均价格. 返回平均成本价格.
+	records = T.codes_all[code]['records']
+	if sell_type in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT']:
+		buy_types = ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3']
+	elif sell_type.startswith('SELL_AT_STEP_'):
+		x = sell_type.split('_')[-1]
+		if x == '0':
+			buy_types = ['BUY_AT_LOCAL_MIN']
+		else:
+			buy_types = [f'BUY_AT_STEP_{x}']
+	else:
+		log(f'trade_get_average_price(): {code} {T.codes_all[code]["name"]} Error! Unknown sell_type: {sell_type}')
+		return 0
+	# 过滤记录
+	filtered_records = [r for r in records if r['type'] in buy_types]
+	if not filtered_records:
+		log(f'trade_get_average_price(): {code} {T.codes_all[code]["name"]} Error! No matching buy records for sell_type: {sell_type}')
+		return 0
+	# 计算加权平均价格
+	total_cost = sum(r['price'] * r['shares'] for r in filtered_records)
+	total_shares = sum(r['shares'] for r in filtered_records)
+	if total_shares == 0:
+		log(f'trade_get_average_price(): {code} {T.codes_all[code]["name"]} Error! total_shares is 0 for sell_type: {sell_type}')
+		return 0
+	averaged_price = total_cost / total_shares
+	return averaged_price
+
 def trade_on_handle_bar(contextInfo):
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if T.CURRENT_DATE != bar_date:
@@ -605,8 +633,10 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_get_sell_shares(contextInfo, code, T.codes_all[code]['type'])
+			average_price = trade_get_average_price(contextInfo, code, T.codes_all[code]['type'])
+			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, T.codes_all[code]['type'], shares=shares)
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares)
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares, profit=profit)
 			continue
 		# 卖出: 持仓超过3天. 从T.codes_all[code]['hold_days']超过3个交易日
 		if current_time >= '09:36:00' and T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes_all[code]['hold_days'] is not None and T.codes_all[code]['hold_days'] >= 4:
@@ -614,8 +644,10 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_get_sell_shares(contextInfo, code, T.codes_all[code]['type'])
+			average_price = trade_get_average_price(contextInfo, code, T.codes_all[code]['type'])
+			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, T.codes_all[code]['type'], shares=shares)
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares)
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares, profit=profit)
 			continue
 		# 买入: 多次台阶买入, 价格每下降0.1倍local_max就买入1次, 最多3次. 台阶是0.79倍, 0.70倍, 0.61倍.
 		if T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current < 0.79 * local_max:
@@ -651,32 +683,40 @@ def trade_on_handle_bar(contextInfo):
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_get_sell_shares(contextInfo, code, T.codes_all[code]['type'])
+			average_price = trade_get_average_price(contextInfo, code, T.codes_all[code]['type'])
+			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, T.codes_all[code]['type'], shares=shares)
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares)
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares, profit=profit)
 			continue
 		if (T.codes_all[code]['type'] in ['BUY_AT_STEP_1'] and current >= 1.15 * T.codes_all[code]['price']) or (T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_1'] and current >= 1.15 * T.codes_all[code]['last_price']):
 			T.codes_all[code]['type'] = 'SELL_AT_STEP_1'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_get_sell_shares(contextInfo, code, T.codes_all[code]['type'])
+			average_price = trade_get_average_price(contextInfo, code, T.codes_all[code]['type'])
+			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, T.codes_all[code]['type'], shares=shares)
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares)
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares, profit=profit)
 			continue
 		if (T.codes_all[code]['type'] in ['BUY_AT_STEP_2'] and current >= 1.15 * T.codes_all[code]['price']) or (T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_2'] and current >= 1.15 * T.codes_all[code]['last_price']):
 			T.codes_all[code]['type'] = 'SELL_AT_STEP_2'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_get_sell_shares(contextInfo, code, T.codes_all[code]['type'])
+			average_price = trade_get_average_price(contextInfo, code, T.codes_all[code]['type'])
+			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, T.codes_all[code]['type'], shares=shares)
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares)
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares, profit=profit)
 			continue
 		if (T.codes_all[code]['type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes_all[code]['price']) or (T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes_all[code]['last_price']):
 			T.codes_all[code]['type'] = 'SELL_AT_STEP_3'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_get_sell_shares(contextInfo, code, T.codes_all[code]['type'])
+			average_price = trade_get_average_price(contextInfo, code, T.codes_all[code]['type'])
+			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, T.codes_all[code]['type'], shares=shares)
-			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares)
+			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'], shares=shares, profit=profit)
 			continue
 	# 打印变化的表格内容
 	if T.last_codes_all is None or T.last_codes_all != T.codes_all:
