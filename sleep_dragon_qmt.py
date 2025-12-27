@@ -124,7 +124,7 @@ def init_load_recommendations_from_db(contextInfo):
 				'last_price': None,
 				'type': None,
 				'last_type': None,
-				'last_trans_date': None,
+				'hold_days': None,
 				'lateral_high': None,
 				'records': []
 			}
@@ -206,13 +206,17 @@ def init_load_recommendations_from_db(contextInfo):
 				T.codes_recommended[code]['last_buy_date'] = latest_buy_date
 		else:
 			T.codes_recommended[code]['last_buy_date'] = None
-	# 枚举T.codes_recommended所有的code, 把'records'里最近的日期复制给T.codes_recommended[code]['last_trans_date']
+	# 枚举T.codes_recommended所有的code, 计算每个T.codes_recommended[code]['hold_days']. 计算规则如下: 对于每个'records'交易记录, 起始日期的'type'为'BUY_AT_LOCAL_MIN'. 从起始日期到T.CURRENT_DATE的交易日的天数, 减去中间有交易的日期天数, 赋值给T.codes_recommended[code]['hold_days']. 注意: 当日有买入和卖出交易的, 算作一天, 不能算作两天.
 	for code in T.codes_recommended:
-		if T.codes_recommended[code]['records']:
-			dates = [r['date'] for r in T.codes_recommended[code]['records']]
-			T.codes_recommended[code]['last_trans_date'] = max(dates)
+		last_buy_date = T.codes_recommended[code]['last_buy_date']
+		if last_buy_date:
+			trading_dates = contextInfo.get_trading_dates(code, last_buy_date, T.CURRENT_DATE, -1, '1d')
+			total_trading_days = len(trading_dates)
+			middle_trade_dates = set(r['date'] for r in T.codes_recommended[code]['records'] if last_buy_date < r['date'] <= T.CURRENT_DATE)
+			hold_days = total_trading_days - len(middle_trade_dates)
+			T.codes_recommended[code]['hold_days'] = hold_days
 		else:
-			T.codes_recommended[code]['last_trans_date'] = None
+			T.codes_recommended[code]['hold_days'] = None
 	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
 	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
 	if len(df_filtered) == 0:
@@ -262,7 +266,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251219'
+	T.TARGET_DATE = '20251226'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -461,7 +465,7 @@ def trade_on_handle_bar(contextInfo):
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes_all[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
-			current = market_data_last_price[code]['high'][0]
+			current = market_data_last_price[code]['low'][0]
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			current = round(market_data_last_price[code]['lastPrice'][0], 2)
@@ -546,8 +550,8 @@ def trade_on_handle_bar(contextInfo):
 			trade_sell_stock(contextInfo, code, T.codes_all[code]['type'])
 			db_insert_record(code, name=T.codes_all[code]['name'], date=T.CURRENT_DATE, type=T.codes_all[code]['type'], price=T.codes_all[code]['price'])
 			continue
-		# 卖出: 持仓超过3天. 从T.codes_all[code]['last_trans_date']到T.CURRENT_DATE超过3个交易日
-		if current_time >= '09:36:00' and T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3'] and T.codes_all[code]['last_trans_date'] is not None and len(contextInfo.get_trading_dates(code, T.codes_all[code]['last_trans_date'], T.CURRENT_DATE, -1, '1d')) > 3:
+		# 卖出: 持仓超过3天. 从T.codes_all[code]['hold_days']超过3个交易日
+		if current_time >= '09:36:00' and T.codes_all[code]['type'] in [None] and T.codes_all[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes_all[code]['hold_days'] is not None and T.codes_all[code]['hold_days'] >= 4:
 			T.codes_all[code]['type'] = 'SELL_AT_TIMEOUT'
 			T.codes_all[code]['price'] = current
 			log(f'{current_time} {T.codes_all[code]["type"]}: {code} {T.codes_all[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
