@@ -627,6 +627,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		# 卖出：最高价大于1.16倍的local_min (从buy_date到当日)
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3'] and local_min != 0 and current >= 1.16 * local_min:
@@ -640,6 +643,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		# 卖出: 持仓超过3天. 从T.codes[code]['hold_days']超过3个交易日
 		if current_time >= '09:36:00' and T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 4:
@@ -653,6 +659,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		# 买入: 多次台阶买入, 价格每下降0.1倍local_max就买入1次, 最多3次. 台阶是0.79倍, 0.70倍, 0.61倍.
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current < 0.79 * local_max:
@@ -665,6 +674,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_1'] and current < 0.70 * local_max:
 			T.codes[code]['type'] = 'BUY_AT_STEP_2'
@@ -676,6 +688,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_2'] and current < 0.61 * local_max:
 			T.codes[code]['type'] = 'BUY_AT_STEP_3'
@@ -687,6 +702,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		# 卖出: 当日出现高于BUY_AT_STEP_x买入价的1.15倍时, 卖出此份股票. buy_price要从T.codes[code]['records']里枚举, 还包括当日买入的T.codes[code]['price']. 卖出时, 用SELL_AT_STEP_0标记
 		if (T.codes[code]['type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes[code]['price'] and False) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes[code]['last_price']):
@@ -700,6 +718,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		if (T.codes[code]['type'] in ['BUY_AT_STEP_1'] and current >= 1.15 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_1'] and current >= 1.15 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_1'
@@ -712,6 +733,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		if (T.codes[code]['type'] in ['BUY_AT_STEP_2'] and current >= 1.15 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_2'] and current >= 1.15 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_2'
@@ -724,6 +748,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 		if (T.codes[code]['type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_3'
@@ -736,6 +763,9 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
+			# 因为今天交易了, 所以持仓天数要减1
+			if T.codes[code]['hold_days'] is not None:
+				T.codes[code]['hold_days'] -= 1
 			continue
 	# 打印变化的表格内容
 	if T.last_codes is None or T.last_codes != T.codes:
