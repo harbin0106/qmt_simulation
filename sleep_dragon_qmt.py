@@ -25,7 +25,6 @@ def init(contextInfo):
 	init_load_codes_in_position(contextInfo)
 	# init_load_recommendations_from_excel(contextInfo)
 	init_load_recommendations_from_db(contextInfo)
-	T.codes_all = T.codes_recommended
 	contextInfo.set_universe(list(set(T.codes_all.keys())))
 	contextInfo.set_account(T.accountid)
 	return
@@ -101,7 +100,7 @@ def init_load_recommendations_from_excel(contextInfo):
 		db_save_stock_status(code, name, r_date, r_date, None, None, None, None, 'Y', '', '')
 
 def init_load_recommendations_from_db(contextInfo):
-	T.codes_recommended = {}
+	T.codes_all = {}
 	# 获取上一个交易日
 	# recommend_date = trade_get_previous_trade_date(contextInfo)
 	# 从数据库加载上一个交易日的推荐股票
@@ -112,11 +111,11 @@ def init_load_recommendations_from_db(contextInfo):
 	# if recommend_date != latest_recommend_date:
 	# 	log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
 	df_filtered = df_all[df_all['is_valid'] == 'Y']
-	# 根据df_all的表格结构, 把所有数据转换到T.codes_recommended里
+	# 根据df_all的表格结构, 把所有数据转换到T.codes_all里
 	for df in df_filtered.itertuples():
 		code = df.code
-		if code not in T.codes_recommended:
-			T.codes_recommended[code] = {
+		if code not in T.codes_all:
+			T.codes_all[code] = {
 				'name': df.name,
 				'recommend_date': df.recommend_date,
 				'lateral_high_date': df.lateral_high_date,
@@ -141,11 +140,11 @@ def init_load_recommendations_from_db(contextInfo):
 				'profit': df.profit,
 				'comment': df.comment
 			}
-			T.codes_recommended[code]['records'].append(record)
+			T.codes_all[code]['records'].append(record)
 
-	for code in T.codes_recommended:
-		# 对于T.codes_recommended里每个code, 去掉T.codes_recommended里'type'为'BUY_AT_LOCAL_MIN'的日期以前的记录. 当有多个'type'为'BUY_AT_LOCAL_MIN'的日期时, 以最近的日期为准. 去掉以'type'为'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'为最近日期结尾的所有记录. 当没有记录时, 保留code, 仅把T.codes_recommended[code]['records']置空
-		records = T.codes_recommended[code]['records']
+	for code in T.codes_all:
+		# 对于T.codes_all里每个code, 去掉T.codes_all里'type'为'BUY_AT_LOCAL_MIN'的日期以前的记录. 当有多个'type'为'BUY_AT_LOCAL_MIN'的日期时, 以最近的日期为准. 去掉以'type'为'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'为最近日期结尾的所有记录. 当没有记录时, 保留code, 仅把T.codes_all[code]['records']置空
+		records = T.codes_all[code]['records']
 		if records:
 			# 找到所有 'BUY_AT_LOCAL_MIN' 的记录
 			buy_local_min_records = [r for r in records if r['type'] == 'BUY_AT_LOCAL_MIN']
@@ -161,10 +160,10 @@ def init_load_recommendations_from_db(contextInfo):
 					records = []
 		else:
 			records = []
-		T.codes_recommended[code]['records'] = records
+		T.codes_all[code]['records'] = records
 		
-		# 枚举T.codes_recommended所有的code, 把它的最近日期非T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 还要添加一个逻辑, 相邻和非相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消(x必须相同), 表示已经发生了完整买卖交易, 需要去除, 并覆盖T.codes_recommended[code]['records']. 剩下的记录再按照前面所述的逻辑复制给'last_type'和'last_price'.
-		records = T.codes_recommended[code]['records']
+		# 枚举T.codes_all所有的code, 把它的最近日期非T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 还要添加一个逻辑, 相邻和非相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消(x必须相同), 表示已经发生了完整买卖交易, 需要去除, 并覆盖T.codes_all[code]['records']. 剩下的记录再按照前面所述的逻辑复制给'last_type'和'last_price'.
+		records = T.codes_all[code]['records']
 		# 过滤相邻和非相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消的记录
 		buy_dict = defaultdict(list)
 		sell_dict = defaultdict(list)
@@ -184,7 +183,7 @@ def init_load_recommendations_from_db(contextInfo):
 				removed_ids.add(buy_list[i]['id'])
 				removed_ids.add(sell_list[i]['id'])
 		filtered_records = [r for r in records if r['id'] not in removed_ids]
-		T.codes_recommended[code]['records'] = filtered_records
+		T.codes_all[code]['records'] = filtered_records
 		records = filtered_records
 
 		if records:
@@ -200,16 +199,16 @@ def init_load_recommendations_from_db(contextInfo):
 				# 从这些中取日期最新的
 				latest_date = max(date_groups.keys())
 				latest_non_today = date_groups[latest_date]
-				T.codes_recommended[code]['last_type'] = latest_non_today['type']
-				T.codes_recommended[code]['last_price'] = latest_non_today['price']
+				T.codes_all[code]['last_type'] = latest_non_today['type']
+				T.codes_all[code]['last_price'] = latest_non_today['price']
 			# T.CURRENT_DATE的记录
 			today_records = [r for r in records if r['date'] == T.CURRENT_DATE]
 			if today_records:
 				# 取 id 最大的
 				latest_today = max(today_records, key=lambda r: r['id'])
-				T.codes_recommended[code]['type'] = latest_today['type']
-				T.codes_recommended[code]['price'] = latest_today['price']
-		# 枚举T.codes_recommended所有的code, 把它最近日期'type'为'BUY_AT_LOCAL_MIN'且'type'为'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'的日期早于'BUY_AT_LOCAL_MIN'的日期的'records'的日期复制给T.codes_recommended[code]['last_buy_date']. 也就说, 'last_buy_date'表示最近一次买入且没有卖出的日期. 如果该股票已经卖出了, 最新日期'type'会变成'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'或者'SELL_AT_TIMEOUT'. 此时'last_buy_date'为None.
+				T.codes_all[code]['type'] = latest_today['type']
+				T.codes_all[code]['price'] = latest_today['price']
+		# 枚举T.codes_all所有的code, 把它最近日期'type'为'BUY_AT_LOCAL_MIN'且'type'为'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'的日期早于'BUY_AT_LOCAL_MIN'的日期的'records'的日期复制给T.codes_all[code]['last_buy_date']. 也就说, 'last_buy_date'表示最近一次买入且没有卖出的日期. 如果该股票已经卖出了, 最新日期'type'会变成'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'或者'SELL_AT_TIMEOUT'. 此时'last_buy_date'为None.
 		buy_records = [r for r in records if r['type'] == 'BUY_AT_LOCAL_MIN']
 		if buy_records:
 			# 按日期分组，取每个日期 id 最大的
@@ -230,34 +229,34 @@ def init_load_recommendations_from_db(contextInfo):
 						has_sell_after = True
 						break
 			if has_sell_after:
-				T.codes_recommended[code]['last_buy_date'] = None
+				T.codes_all[code]['last_buy_date'] = None
 			else:
-				T.codes_recommended[code]['last_buy_date'] = latest_buy_date
+				T.codes_all[code]['last_buy_date'] = latest_buy_date
 		else:
-			T.codes_recommended[code]['last_buy_date'] = None
-	# 枚举T.codes_recommended所有的code, 计算每个T.codes_recommended[code]['hold_days']. 计算规则如下: 对于每个'records'交易记录, 起始日期的'type'为'BUY_AT_LOCAL_MIN'. 从起始日期到T.CURRENT_DATE的交易日的天数, 减去中间有交易的日期天数, 赋值给T.codes_recommended[code]['hold_days']. 注意: 当日有买入和卖出交易的, 算作一天, 不能算作两天.
-	for code in T.codes_recommended:
-		last_buy_date = T.codes_recommended[code]['last_buy_date']
+			T.codes_all[code]['last_buy_date'] = None
+	# 枚举T.codes_all所有的code, 计算每个T.codes_all[code]['hold_days']. 计算规则如下: 对于每个'records'交易记录, 起始日期的'type'为'BUY_AT_LOCAL_MIN'. 从起始日期到T.CURRENT_DATE的交易日的天数, 减去中间有交易的日期天数, 赋值给T.codes_all[code]['hold_days']. 注意: 当日有买入和卖出交易的, 算作一天, 不能算作两天.
+	for code in T.codes_all:
+		last_buy_date = T.codes_all[code]['last_buy_date']
 		if last_buy_date:
 			trading_dates = contextInfo.get_trading_dates(code, last_buy_date, T.CURRENT_DATE, -1, '1d')
 			total_trading_days = len(trading_dates)
-			middle_trade_dates = set(r['date'] for r in T.codes_recommended[code]['records'] if last_buy_date < r['date'] <= T.CURRENT_DATE)
+			middle_trade_dates = set(r['date'] for r in T.codes_all[code]['records'] if last_buy_date < r['date'] <= T.CURRENT_DATE)
 			hold_days = total_trading_days - len(middle_trade_dates)
-			T.codes_recommended[code]['hold_days'] = hold_days
+			T.codes_all[code]['hold_days'] = hold_days
 		else:
-			T.codes_recommended[code]['hold_days'] = None
-	df = pd.DataFrame.from_dict(T.codes_recommended, orient='index')
-	log(f'init_load_recommendations_from_db(): T.codes_recommended=\n{T.codes_recommended}')
+			T.codes_all[code]['hold_days'] = None
+	df = pd.DataFrame.from_dict(T.codes_all, orient='index')
+	log(f'init_load_recommendations_from_db(): T.codes_all=\n{T.codes_all}')
 	if len(df_filtered) == 0:
 		log(f'init_load_recommendations_from_db(): Error! Number of recommendations is 0!')
-	# 判断T.codes_in_postition在T.codes_recommended中是否存在
+	# 判断T.codes_in_postition在T.codes_all中是否存在
 	for code in T.codes_in_position:
-		if code not in T.codes_recommended:
+		if code not in T.codes_all:
 			log(f'init_load_recommendations_from_db(): Warning! code {code} {T.codes_in_position[code]["name"]} in position but not in recommendations!')
 			continue
-		if T.codes_recommended[code]['last_type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
-			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "last_type" is invalid! {T.codes_recommended[code]["last_type"]}')
-			# T.codes_recommended[code]['last_type'] = 'BUY_AT_LOCAL_MIN'
+		if T.codes_all[code]['last_type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
+			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "last_type" is invalid! {T.codes_all[code]["last_type"]}')
+			# T.codes_all[code]['last_type'] = 'BUY_AT_LOCAL_MIN'
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -295,7 +294,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251222'
+	T.TARGET_DATE = '20251210'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes_all = None
 	# 用于过滤log
@@ -330,42 +329,42 @@ def on_timer(contextInfo):
 	# # Check prices only
 	# if current_time >= CHECK_PRICE_TIME and current_time < BUY_STOCK_TIME:
 	# 	log(f'\non_timer(): current_time={current_time}, check price......')
-	# 	ticks = contextInfo.get_full_tick(list(set(T.codes_recommended.keys())))
+	# 	ticks = contextInfo.get_full_tick(list(set(T.codes_all.keys())))
 	# 	# log(f'on_timer(): ticks=\n{ticks}')
-	# 	for code in list(set(T.codes_recommended.keys())):
+	# 	for code in list(set(T.codes_all.keys())):
 	# 		last_price = ticks[code]['lastPrice']
-	# 		recommend_date = T.codes_recommended[code]['recommend_date']
+	# 		recommend_date = T.codes_all[code]['recommend_date']
 	# 		to_buy = trade_is_to_buy(contextInfo, code, last_price, recommend_date)
-	# 		if to_buy and T.codes_recommended[code]['type'] == '':
+	# 		if to_buy and T.codes_all[code]['type'] == '':
 	# 			log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, current_time={current_time}, last_price={last_price:.2f}, recommend_date={recommend_date}, to_buy={to_buy}')
-	# 			T.codes_recommended[code]['type'] = 'BUY_AT_CALL_AUCTION'
-	# 			db_insert_record(code, status=T.codes_recommended[code]['type'])
+	# 			T.codes_all[code]['type'] = 'BUY_AT_CALL_AUCTION'
+	# 			db_insert_record(code, status=T.codes_all[code]['type'])
 
-	# log(f'on_timer(): T.codes_recommended={T.codes_recommended}')
+	# log(f'on_timer(): T.codes_all={T.codes_all}')
 	# # 下单买入
 	# # 计算标记为'BUY_AT_CALL_AUCTION'的股票个数
 	# if current_time >= BUY_STOCK_TIME and current_time <= STOP_TIMER_TIME:
-	# 	buy_at_open_count = sum(1 for code in T.codes_recommended if T.codes_recommended[code].get('type') == 'BUY_AT_CALL_AUCTION')
+	# 	buy_at_open_count = sum(1 for code in T.codes_all if T.codes_all[code].get('type') == 'BUY_AT_CALL_AUCTION')
 	# 	if buy_at_open_count == 0:
 	# 		log(f'on_timer(): no stocks to buy......')
 	# 		return
 	# 	amount_of_each_stock = (trade_get_cash(contextInfo) / buy_at_open_count - T.commission_minimum) / (1 + T.commission_rate + T.transfer_fee_rate) / 1000
-	# 	for code in list(set(T.codes_recommended.keys())):
-	# 		if T.codes_recommended[code]['type'] != 'BUY_AT_CALL_AUCTION':
+	# 	for code in list(set(T.codes_all.keys())):
+	# 		if T.codes_all[code]['type'] != 'BUY_AT_CALL_AUCTION':
 	# 			continue
 	# 		log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes_all[code]["name"]}, buying at amount {amount_of_each_stock:.2f}元')
 	# 		trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, amount_of_each_stock, 'BUY_AT_CALL_AUCTION')
-	# 		T.codes_recommended[code]['type'] = 'BUY_AT_CALL_AUCTION'
-	# 		db_insert_record(code, status=T.codes_recommended[code]['type'])
+	# 		T.codes_all[code]['type'] = 'BUY_AT_CALL_AUCTION'
+	# 		db_insert_record(code, status=T.codes_all[code]['type'])
 	
 def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
-	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_recommended.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
+	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes_all.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
 	# trade_buy_stock_by_amount(contextInfo, '002300.SZ', 10000000, '测试买入1千万')
-	# trade_buy_stock_by_volume(contextInfo, list(T.codes_recommended.keys())[2], 100, 'test trade_buy_stock_by_volume()')
-	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_recommended.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
+	# trade_buy_stock_by_volume(contextInfo, list(T.codes_all.keys())[2], 100, 'test trade_buy_stock_by_volume()')
+	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes_all.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
 	# df = pd.DataFrame.from_dict(T.codes_all, orient='index')
 	# log(f'after_init(): T.codes_all=\n{df.to_string()}')
 	# 计算lateral_high_date是否正确
@@ -490,7 +489,7 @@ def trade_get_sell_shares(contextInfo, code, sell_type):
 		for r in records:
 			if r['type'] == buy_type:
 				return r['shares']
-		log(f'trade_get_sell_shares(): {code} {T.codes_all[code]["name"]} sell_type={sell_type} Error! no r["shares"] are found!')
+		log(f'trade_get_sell_shares(): {code} {T.codes_all[code]["name"]} sell_type={sell_type} Error! no r["shares"] is found!')
 		return 0
 	else:
 		log(f'trade_get_sell_shares(): {code} {T.codes_all[code]["name"]} sell_type={sell_type} Error! Unknown sell_type!')
