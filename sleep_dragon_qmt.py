@@ -25,7 +25,7 @@ def init(contextInfo):
 	init_load_codes_in_position(contextInfo)
 	# init_load_recommendations_from_excel(contextInfo)
 	init_load_recommendations_from_db(contextInfo)
-	contextInfo.set_universe(list(set(T.codes.keys())))
+	contextInfo.set_universe(sorted(set(T.codes.keys())))
 	contextInfo.set_account(T.accountid)
 	return
 	# Start the opening call auction timer
@@ -330,9 +330,9 @@ def on_timer(contextInfo):
 	# # Check prices only
 	# if current_time >= CHECK_PRICE_TIME and current_time < BUY_STOCK_TIME:
 	# 	log(f'\non_timer(): current_time={current_time}, check price......')
-	# 	ticks = contextInfo.get_full_tick(list(set(T.codes.keys())))
+	# 	ticks = contextInfo.get_full_tick(sorted(set(T.codes.keys())))
 	# 	# log(f'on_timer(): ticks=\n{ticks}')
-	# 	for code in list(set(T.codes.keys())):
+	# 	for code in sorted(set(T.codes.keys())):
 	# 		last_price = ticks[code]['lastPrice']
 	# 		recommend_date = T.codes[code]['recommend_date']
 	# 		to_buy = trade_is_to_buy(contextInfo, code, last_price, recommend_date)
@@ -350,7 +350,7 @@ def on_timer(contextInfo):
 	# 		log(f'on_timer(): no stocks to buy......')
 	# 		return
 	# 	amount_of_each_stock = (trade_get_cash(contextInfo) / buy_at_open_count - T.commission_minimum) / (1 + T.commission_rate + T.transfer_fee_rate) / 1000
-	# 	for code in list(set(T.codes.keys())):
+	# 	for code in sorted(set(T.codes.keys())):
 	# 		if T.codes[code]['type'] != 'BUY_AT_CALL_AUCTION':
 	# 			continue
 	# 		log(f'on_timer(BUY_AT_CALL_AUCTION): {code} {T.codes[code]["name"]}, buying at amount {amount_of_each_stock:.2f}元')
@@ -362,10 +362,10 @@ def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	trade_query_info(contextInfo)
-	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, list(T.codes.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
+	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, sorted(T.codes.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
 	# trade_buy_stock_by_amount(contextInfo, '002300.SZ', 10000000, '测试买入1千万')
-	# trade_buy_stock_by_volume(contextInfo, list(T.codes.keys())[2], 100, 'test trade_buy_stock_by_volume()')
-	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, list(T.codes.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
+	# trade_buy_stock_by_volume(contextInfo, sorted(T.codes.keys())[2], 100, 'test trade_buy_stock_by_volume()')
+	# trade_buy_stock_at_up_stop_price_by_volume(contextInfo, sorted(T.codes.keys())[1], 100, 'test trade_buy_stock_at_up_stop_price_by_volume()')
 	# df = pd.DataFrame.from_dict(T.codes, orient='index')
 	# log(f'after_init(): T.codes=\n{df.to_string()}')
 	# 计算lateral_high_date是否正确
@@ -381,7 +381,7 @@ def after_init(contextInfo):
 def trade_refine_codes(contextInfo):
 	start_date = '20240418'
 	filtered_codes = {}
-	for code in list(set(T.codes.keys())):
+	for code in sorted(set(T.codes.keys())):
 		market_data_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=start_date, end_time=T.codes[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
 		if market_data_high is None:
 			log(f'trade_refine_codes(): Error! market_data_high is None! {code}, {T.codes[code]["name"]}')
@@ -396,7 +396,8 @@ def trade_refine_codes(contextInfo):
 			log(f'trade_refine_codes(): Error! highs.empty! {code}, {T.codes[code]["name"]}')
 			continue
 		closes= market_data_close[code]['close'].astype(float)
-		lateral_high_date = highs.idxmax()
+		sorted_highs = highs.sort_index()
+		lateral_high_date = sorted_highs.idxmax()
 		lateral_high = max(highs)
 		if T.codes[code]['lateral_high_date'] != lateral_high_date:
 			log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}. Error! Invalid lateral_high_date! lateral_high_date={lateral_high_date}, db={T.codes[code]["lateral_high_date"]}')
@@ -417,8 +418,12 @@ def trade_refine_codes(contextInfo):
 			continue
 		highs_20 = market_data_high_20[code]['high'].astype(float)
 		max_high_20 = max(highs_20)
-		if max_high_20 <= lateral_high:
-			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. max_high_20={max_high_20:.2f} <= lateral_high={lateral_high:.2f}')
+		if max_high_20 < lateral_high:
+			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. max_high_20={max_high_20:.2f} < lateral_high={lateral_high:.2f}')
+			continue
+		# 判断是否停牌
+		if contextInfo.is_suspended_stock(code):
+			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} {T.CURRENT_DATE} 停牌!')
 			continue
 		# log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}, lateral_high={lateral_high:.2f}, closes[-1]={closes[-1]}')
 		filtered_codes[code] = T.codes[code]
@@ -538,7 +543,11 @@ def trade_on_handle_bar(contextInfo):
 	if current_time < T.MARKET_OPEN_TIME:
 		return
 	# 判断买卖条件, 并保存指令状态
-	for code in list(set(T.codes.keys())):
+	for code in sorted(set(T.codes.keys())):
+		# 判断是否停牌
+		if contextInfo.is_suspended_stock(code):
+			log(f'trade_on_handle_bar(): Warning! {code} {T.codes[code]["name"]} {T.CURRENT_DATE}停牌!')
+			continue
 		# 获取当前的最新价格
 		if T.TARGET_DATE != '':
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
@@ -548,12 +557,18 @@ def trade_on_handle_bar(contextInfo):
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
 			current = market_data_last_price[code]['low'][0]
+			if current == 0:
+				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
+				continue
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{bar_time}分笔线数据!')
 				continue
 			current = round(market_data_last_price[code]['lastPrice'][0], 2)
+			if current == 0:
+				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
+				continue
 		if T.codes[code]['lateral_high'] is None:
 			lateral_high_date = T.codes[code]['lateral_high_date']
 			if lateral_high_date is None:
@@ -627,7 +642,7 @@ def trade_on_handle_bar(contextInfo):
 			T.codes[code]['type'] = 'BUY_AT_LOCAL_MIN'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['type'])
+			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if T.TARGET_DATE != '':
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
@@ -645,7 +660,7 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_get_sell_shares(contextInfo, code, T.codes[code]['type'])
 			average_price = trade_get_average_price(contextInfo, code, T.codes[code]['type'])
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, T.codes[code]['type'], shares=shares)
+			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
@@ -661,7 +676,7 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_get_sell_shares(contextInfo, code, T.codes[code]['type'])
 			average_price = trade_get_average_price(contextInfo, code, T.codes[code]['type'])
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, T.codes[code]['type'], shares=shares)
+			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
@@ -674,7 +689,7 @@ def trade_on_handle_bar(contextInfo):
 			T.codes[code]['type'] = 'BUY_AT_STEP_1'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['type'])
+			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if T.TARGET_DATE != '':
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
@@ -688,7 +703,7 @@ def trade_on_handle_bar(contextInfo):
 			T.codes[code]['type'] = 'BUY_AT_STEP_2'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['type'])
+			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if T.TARGET_DATE != '':
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
@@ -702,7 +717,7 @@ def trade_on_handle_bar(contextInfo):
 			T.codes[code]['type'] = 'BUY_AT_STEP_3'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['type'])
+			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if T.TARGET_DATE != '':
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
@@ -720,7 +735,7 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_get_sell_shares(contextInfo, code, T.codes[code]['type'])
 			average_price = trade_get_average_price(contextInfo, code, T.codes[code]['type'])
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, T.codes[code]['type'], shares=shares)
+			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
@@ -735,7 +750,7 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_get_sell_shares(contextInfo, code, T.codes[code]['type'])
 			average_price = trade_get_average_price(contextInfo, code, T.codes[code]['type'])
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, T.codes[code]['type'], shares=shares)
+			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
@@ -750,7 +765,7 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_get_sell_shares(contextInfo, code, T.codes[code]['type'])
 			average_price = trade_get_average_price(contextInfo, code, T.codes[code]['type'])
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, T.codes[code]['type'], shares=shares)
+			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
@@ -765,7 +780,7 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_get_sell_shares(contextInfo, code, T.codes[code]['type'])
 			average_price = trade_get_average_price(contextInfo, code, T.codes[code]['type'])
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, T.codes[code]['type'], shares=shares)
+			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
@@ -834,7 +849,7 @@ def trade_sell_stock(contextInfo, code, comment):
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_designated, last_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_sell_stock(): {code} {T.codes[code]["name"]}, {comment}, 以 {last_price:.2f} 元卖出 {volume} 股')
 
-def trade_sell_stock_by_shares(contextInfo, code, comment, shares):
+def trade_sell_stock_by_shares(contextInfo, code, shares, last_price, comment):
 	shares_in_stock = 0
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	for dt in positions:
@@ -854,11 +869,14 @@ def trade_sell_stock_by_shares(contextInfo, code, comment, shares):
 		log(f'trade_sell_stock(): {code} {T.codes[code]["name"]}, {comment}, Error! invalid shares! shares % 100 != 0! shares={shares}')
 		return
 	# 通过指定价格卖出
-	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
-	if code not in market_data or market_data[code].empty:
-		log(f'trade_sell_stock(): Error! 无法获取{code} {T.codes[code]["name"]}的最新股价!')
+	# market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+	# if code not in market_data or market_data[code].empty:
+	# 	log(f'trade_sell_stock(): Error! 无法获取{code} {T.codes[code]["name"]}的最新股价!')
+	# 	return
+	# last_price = market_data[code]['lastPrice'][0]
+	if last_price == 0 or last_price is None:
+		log(f'trade_sell_stock(): Error! Invalid last_price! last_price={last_price}')
 		return
-	last_price = market_data[code]['lastPrice'][0]
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_designated, last_price, shares, T.strategyName, T.quickTrade, comment, contextInfo)
 	log(f'trade_sell_stock(): {code} {T.codes[code]["name"]}, {comment}, 以 {last_price:.2f} 元卖出 {shares} 股')
 
@@ -931,16 +949,19 @@ def trade_get_fee(contextInfo, buy_amount):
 	transfer_fee = buy_amount * T.transfer_fee_rate
 	return commission + transfer_fee
 
-def trade_buy_stock_by_amount(contextInfo, code, buy_amount, comment):
-	log(f'trade_buy_stock_by_amount(): {code} {T.codes[code]["name"]}, buy_amount={buy_amount:.2f}元')
+def trade_buy_stock_by_amount(contextInfo, code, buy_amount, last_price, comment):
+	log(f'trade_buy_stock_by_amount(): {code} {T.codes[code]["name"]}, buy_amount={buy_amount:.2f}元, last_price={last_price}')
 	#获取当前最新股价, 计算是否能够买入大于100股股票
 	# 获取当前最新股价
-	market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
-	if code not in market_data or market_data[code].empty:
-		log(f'trade_buy_stock_by_amount(): Error! 无法获取{code} {T.codes[code]["name"]}的最新股价!')
-		return 0
-	last_price = market_data[code]['lastPrice'][0]
+	# market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
+	# if code not in market_data or market_data[code].empty:
+	# 	log(f'trade_buy_stock_by_amount(): Error! 无法获取{code} {T.codes[code]["name"]}的最新股价!')
+	# 	return 0
+	# last_price = market_data[code]['lastPrice'][0]
 	# log(f'trade_buy_stock_by_amount(): 当前最新股价: {last_price:.2f}')
+	if last_price == 0 or last_price is None:
+		log(f'trade_buy_stock_by_amount(): Error! Invalid last_price! last_price={last_price}!')
+		return 0
 	# 计算买入股数
 	volume = int(buy_amount / last_price // 100) * 100
 	if volume < 100:
@@ -1054,7 +1075,7 @@ def position_callback(contextInfo, positionInfo):
 		name = T.codes[code]["name"]
 	else:
 		name = positionInfo.m_strInstrumentName
-		log(f'position_callback(): Warning! {code} {name} is not in T.codes! T.codes=\n{T.codes}')
+		log(f'position_callback(): Warning! {code} {name} is not in T.codes!')
 	# log(f'position_callback(): {code} {name}, m_nVolume={positionInfo.m_nVolume}, m_nFrozenVolume={positionInfo.m_nFrozenVolume}')
 	# 检查持仓变化并记录
 	log(f'position_callback(): 持仓更新 - 股票: {code} {name}, 总持仓量: {positionInfo.m_nVolume}, 可用数量: {positionInfo.m_nCanUseVolume}, 冻结数量: {positionInfo.m_nFrozenVolume}, 成本价: {positionInfo.m_dOpenPrice:.2f}, 持仓盈亏: {positionInfo.m_dPositionProfit:.2f}, m_nDirection={positionInfo.m_nDirection}')
