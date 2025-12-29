@@ -396,11 +396,10 @@ def trade_refine_codes(contextInfo):
 			log(f'trade_refine_codes(): Error! highs.empty! {code}, {T.codes[code]["name"]}')
 			continue
 		closes= market_data_close[code]['close'].astype(float)
-		sorted_highs = highs.sort_index()
-		lateral_high_date = sorted_highs.idxmax()
 		lateral_high = max(highs)
-		if T.codes[code]['lateral_high_date'] != lateral_high_date:
-			log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}. Error! Invalid lateral_high_date! lateral_high_date={lateral_high_date}, db={T.codes[code]["lateral_high_date"]}')
+		lateral_high_dates = highs[highs == lateral_high].index
+		if T.codes[code]['lateral_high_date'] != lateral_high_dates[0] and T.codes[code]['lateral_high_date'] != lateral_high_dates[-1]:
+			log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}. Error! Invalid lateral_high_date! lateral_high_date={lateral_high_dates}, db={T.codes[code]["lateral_high_date"]}')
 			continue
 		# 过滤掉还没有接近水平突破线的股票
 		# if closes[0] < lateral_high * 0.9 and False:
