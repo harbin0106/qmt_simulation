@@ -570,7 +570,7 @@ def trade_on_handle_bar(contextInfo):
 			lateral_high = T.codes[code]['lateral_high']
 		# 获取120日的成交额
 		market_data_120 = contextInfo.get_market_data_ex(['amount', 'close', 'low', 'open', 'high'], [code], period='1d', end_time=T.CURRENT_DATE, count=120, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data_120.empty:
+		if market_data_120[code].empty:
 			log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的market_data_120数据!')
 			continue
 		# 转换成单位亿
