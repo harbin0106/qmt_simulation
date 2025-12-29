@@ -255,8 +255,8 @@ def init_load_recommendations_from_db(contextInfo):
 		if code not in T.codes:
 			log(f'init_load_recommendations_from_db(): Warning! code {code} {T.codes_in_position[code]["name"]} in position but not in recommendations!')
 			continue
-		if T.codes[code]['last_type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
-			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "last_type" is invalid! {T.codes[code]["last_type"]}')
+		if T.codes[code]['last_type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes[code]['type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
+			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "last_type" is invalid! T.codes[code]["last_type"]={T.codes[code]["last_type"]}, T.codes[code]["type"]={T.codes[code]["type"]}')
 			# T.codes[code]['last_type'] = 'BUY_AT_LOCAL_MIN'
 
 def init_trade_parameters(contextInfo):
@@ -295,7 +295,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251226'
+	T.TARGET_DATE = ''
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes = None
 	# 用于过滤log
@@ -561,7 +561,7 @@ def trade_on_handle_bar(contextInfo):
 			if market_data_lateral_high[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的推荐日{lateral_high_date}收盘价数据!')
 				continue
-			lateral_high = market_data_lateral_high[code]['high'][0]
+			lateral_high = round(market_data_lateral_high[code]['high'][0], 2)
 			T.codes[code]['lateral_high'] = lateral_high
 		else:
 			lateral_high = T.codes[code]['lateral_high']
