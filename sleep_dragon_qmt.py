@@ -80,9 +80,9 @@ def init_load_codes_in_position(contextInfo):
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
 			T.codes_in_position[code]['last_trade_date'] = trade_dates.get(code, '') #dt.m_strOpenDate  # 使用成交日期
-			T.codes_in_position[code]['shares'] = dt.m_nVolume
-			T.codes_in_position[code]['price'] = dt.m_dOpenPrice
-			T.codes_in_position[code]['market_value'] = dt.m_dMarketValue
+			T.codes_in_position[code]['shares'] = round(dt.m_nVolume, 0)
+			T.codes_in_position[code]['price'] = round(dt.m_dOpenPrice, 2)
+			T.codes_in_position[code]['market_value'] = round(dt.m_dMarketValue, 0)
 			T.codes_in_position[code]['profit_rate'] = round(dt.m_dProfitRate * 100, 1)
 	df = pd.DataFrame.from_dict(T.codes_in_position, orient='index')
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{df.to_string()}')
@@ -819,7 +819,7 @@ def trade_query_info(contextInfo):
 				direction = "买入"
 			else:
 				direction = o.m_nOffsetFlag
-			log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 委托方向: {direction}', f' 数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice:.2f} 元, 成交数量: {o.m_nVolumeTraded}, 成交金额: {o.m_dTradeAmount:.2f} 元, 时间: {o.m_strInsertDate}T{o.m_strInsertTime.zfill(6)}')
+			log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 委托方向: {direction}', f' 数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice:.2f} 元, 成交数量: {o.m_nVolumeTraded}, 成交金额: {o.m_dTradeAmount:.0f} 元, 时间: {o.m_strInsertDate}T{o.m_strInsertTime.zfill(6)}')
 
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
 	log("trade_query_info(): 最近7天的成交记录:")
@@ -832,7 +832,7 @@ def trade_query_info(contextInfo):
 				direction = "买入"
 			else:
 				direction = dt.m_nOffsetFlag
-			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 成交方向: {direction}', f' 价格: {dt.m_dPrice:.2f}, 数量: {dt.m_nVolume}, 金额: {dt.m_dTradeAmount:.2f} 元, 时间: {dt.m_strTradeDate}T{dt.m_strTradeTime.zfill(6)}')
+			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 成交方向: {direction}', f' 价格: {dt.m_dPrice:.2f}, 数量: {dt.m_nVolume}, 金额: {dt.m_dTradeAmount:.0f} 元, 时间: {dt.m_strTradeDate}T{dt.m_strTradeTime.zfill(6)}')
 
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	log("trade_query_info(): 当前持仓状态:")
@@ -930,7 +930,7 @@ def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, co
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {T.codes[code]["name"]} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.2f} 元')
+	log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {T.codes[code]["name"]} 以涨停价{up_stop_price:.2f}买入 {volume}手金额 {buy_amount:.0f} 元')
 
 def trade_buy_stock_at_up_stop_price_by_volume(contextInfo, code, volume, comment):
 	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {T.codes[code]["name"]}, volume={volume} 股')
@@ -963,7 +963,7 @@ def trade_buy_stock_at_up_stop_price_by_volume(contextInfo, code, volume, commen
 		return
 	# 使用passorder进行指定价买入，prType=11，price=up_stop_price
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, up_stop_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {T.codes[code]["name"]} 以涨停价{up_stop_price:.2f}买入 {volume} 股，预计成交金额 {buy_amount:.2f} 元')
+	log(f'trade_buy_stock_at_up_stop_price_by_volume(): {code} {T.codes[code]["name"]} 以涨停价{up_stop_price:.2f}买入 {volume} 股，预计成交金额 {buy_amount:.0f} 元')
 
 def trade_get_fee(contextInfo, buy_amount):
 	# 计算交易费用
@@ -1006,7 +1006,7 @@ def trade_buy_stock_by_amount(contextInfo, code, buy_amount, last_price, comment
 		return 0
 	# 使用passorder进行指定价格last_price买入，按股数
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_designated, last_price, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_by_amount(): {code} {T.codes[code]["name"]} 指定价格{last_price:.2f} 买入 {volume} 股，预计成交金额 {actual_buy_amount:.2f} 元')
+	log(f'trade_buy_stock_by_amount(): {code} {T.codes[code]["name"]} 指定价格{last_price:.2f} 买入 {volume} 股，预计成交金额 {actual_buy_amount:.0f} 元')
 	return volume
 
 def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
@@ -1044,7 +1044,7 @@ def trade_buy_stock_by_volume(contextInfo, code, volume, comment):
 
 	# 使用passorder进行市价买入，按股数
 	passorder(T.opType_buy, T.orderType_volume, T.accountid, code, T.prType_latest, T.price_invalid, volume, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_buy_stock_by_volume(): {code} {T.codes[code]["name"]} 市价买入 {volume} 股，预计成交金额 {trade_amount:.2f} 元')
+	log(f'trade_buy_stock_by_volume(): {code} {T.codes[code]["name"]} 市价买入 {volume} 股，预计成交金额 {trade_amount:.0f} 元')
 
 def account_callback(contextInfo, accountInfo):
 	# 输出资金账号状态
@@ -1062,13 +1062,13 @@ def order_callback(contextInfo, orderInfo):
 	# log(f'order_callback(): {code} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
-		log(f'order_callback(): 委托已全部成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.2f} 元, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
+		log(f'order_callback(): 委托已全部成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 成交数量: {orderInfo.m_nVolumeTraded}, 成交均价: {orderInfo.m_dTradedPrice:.2f}, 成交金额: {orderInfo.m_dTradeAmount:.0f} 元, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
 		# if '买' in orderInfo.m_strOptName:
 		# 	db_insert_record(code, price=orderInfo.m_dTradedPrice)
 		# elif '卖' in orderInfo.m_strOptName:
 		# 	db_insert_record(code, price=orderInfo.m_dTradedPrice)
 	elif orderInfo.m_nOrderStatus == 55:  # 部成
-		log(f'order_callback(): 委托部分成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.2f} 元, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
+		log(f'order_callback(): 委托部分成交 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, 已成交数量: {orderInfo.m_nVolumeTraded}, 剩余数量: {orderInfo.m_nVolumeTotal}, 成交金额: {orderInfo.m_dTradeAmount:.0f} 元, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
 	elif orderInfo.m_nOrderStatus == 54:  # 已撤
 		log(f'order_callback(): 委托已撤销 - 股票: {code} {name}, 委托ID: {orderInfo.m_strOrderSysID}, m_nDirection={orderInfo.m_nDirection}, m_strOptName={orderInfo.m_strOptName}')
 	else:
@@ -1085,10 +1085,10 @@ def deal_callback(contextInfo, dealInfo):
 		log(f'deal_callback(): Warning! {code} {name} is not in T.codes!')
 	# log(f'deal_callback(): {code} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
 	# 检查成交结果并记录
-	# log(f'deal_callback(): 成交确认 - 股票: {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
+	# log(f'deal_callback(): 成交确认 - 股票: {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.0f}, 买卖方向: {dealInfo.m_nDirection}')
 	# 可以在这里添加更多逻辑，如更新全局变量、发送通知等
 	# 例如，检查是否为买入或卖出，并更新持仓统计
-	log(f'deal_callback(): {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f} 元, m_strOptName={dealInfo.m_strOptName}')
+	log(f'deal_callback(): {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.0f} 元, m_strOptName={dealInfo.m_strOptName}')
 
 # 持仓主推函数
 def position_callback(contextInfo, positionInfo):
