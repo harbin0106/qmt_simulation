@@ -44,7 +44,7 @@ def init_load_codes_in_position(contextInfo):
 
 	# 获取成交记录，筛选买入操作，记录首次买入日期
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
-	buy_dates = {}
+	trade_dates = {}
 	for deal in deals:
 		code = f"{deal.m_strInstrumentID}.{deal.m_strExchangeID}"
 		# 打印所有成员变量的内容
@@ -56,10 +56,10 @@ def init_load_codes_in_position(contextInfo):
 		# 			log(f'  {attr}: {value}')
 		# 		except:
 		# 			log(f'  {attr}: <无法获取>')
-		if code in codes and deal.m_nDirection == 48:  # 48 表示买入
+		if code in codes and deal.m_nDirection == 48:  # 48 表示买入或者卖出
 			trade_date = deal.m_strTradeDate
-			if code not in buy_dates or trade_date < buy_dates[code]:
-				buy_dates[code] = trade_date
+			if code not in trade_dates or trade_date < trade_dates[code]:
+				trade_dates[code] = trade_date
 
 	# 构建 T.codes_in_position
 	for dt in positions:
@@ -79,7 +79,7 @@ def init_load_codes_in_position(contextInfo):
 				continue
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
-			T.codes_in_position[code]['last_buy_date'] = dt.m_strOpenDate  # 使用成交日期
+			T.codes_in_position[code]['last_trade_date'] = trade_dates.get(code, '') #dt.m_strOpenDate  # 使用成交日期
 			T.codes_in_position[code]['shares'] = dt.m_nVolume
 			T.codes_in_position[code]['price'] = dt.m_dOpenPrice
 			T.codes_in_position[code]['market_value'] = dt.m_dMarketValue
@@ -814,7 +814,7 @@ def trade_query_info(contextInfo):
 		order_date = datetime.strptime(o.m_strInsertDate, '%Y%m%d').date()
 		if order_date >= N_days_ago:
 			log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
-			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice:.2f} 元, 成交数量: {o.m_nVolumeTraded}, 成交金额: {o.m_dTradeAmount:.2f} 元, 委托时间: {o.m_strInsertDate} T {o.m_strInsertTime}')
+			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice:.2f} 元, 成交数量: {o.m_nVolumeTraded}, 成交金额: {o.m_dTradeAmount:.2f} 元, 委托时间: {o.m_strInsertDate}T{o.m_strInsertTime}')
 
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
 	log("trade_query_info(): 最近7天的成交记录:")
@@ -822,7 +822,7 @@ def trade_query_info(contextInfo):
 		deal_date = datetime.strptime(dt.m_strTradeDate, '%Y%m%d').date()
 		if deal_date >= N_days_ago:
 			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
-			f'成交价格: {dt.m_dPrice:.2f}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount:.2f} 元, 成交时间: {dt.m_strTradeDate} T {dt.m_strTradeTime}')
+			f'成交价格: {dt.m_dPrice:.2f}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount:.2f} 元, 成交时间: {dt.m_strTradeDate}T{dt.m_strTradeTime}')
 
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	log("trade_query_info(): 当前持仓状态:")
