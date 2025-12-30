@@ -311,6 +311,8 @@ def init_trade_parameters(contextInfo):
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
+	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt - 20251228 OK.db'
+	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
 
 def open_log_file(contextInfo):
 	# 打开日志文件
@@ -575,7 +577,7 @@ def trade_on_handle_bar(contextInfo):
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			if market_data_last_price[code].empty:
-				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{current_time}分笔线数据!')
+				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的 {current_time} 分笔线数据!')
 				continue
 			current = round(market_data_last_price[code]['lastPrice'][0], 2)
 			if current == 0:
@@ -664,8 +666,8 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
-		# 卖出：最高价大于1.16倍的local_min (从buy_date到当日)
-		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3'] and local_min != 0 and current >= 1.16 * local_min:
+		# 卖出：最高价大于1.21倍的local_min (从buy_date到当日)
+		if ((T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3']) or (T.codes[code]['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'])) and local_min != 0 and current >= 1.21 * local_min:
 			T.codes[code]['type'] = 'SELL_AT_LOCAL_MAX'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
@@ -739,8 +741,8 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
-		# 卖出: 当日出现高于BUY_AT_STEP_x买入价的1.15倍时, 卖出此份股票. buy_price要从T.codes[code]['records']里枚举, 还包括当日买入的T.codes[code]['price']. 卖出时, 用SELL_AT_STEP_0标记
-		if (T.codes[code]['type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes[code]['price'] and False) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.15 * T.codes[code]['last_price']):
+		# 卖出: 当日出现高于BUY_AT_STEP_x买入价的1.16倍时, 卖出此份股票. buy_price要从T.codes[code]['records']里枚举, 还包括当日买入的T.codes[code]['price']. 卖出时, 用SELL_AT_STEP_0标记
+		if (T.codes[code]['type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.16 * T.codes[code]['price'] and False) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_0'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
@@ -755,7 +757,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
-		if (T.codes[code]['type'] in ['BUY_AT_STEP_1'] and current >= 1.15 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_1'] and current >= 1.15 * T.codes[code]['last_price']):
+		if (T.codes[code]['type'] in ['BUY_AT_STEP_1'] and current >= 1.16 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_1'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_1'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
@@ -770,7 +772,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
-		if (T.codes[code]['type'] in ['BUY_AT_STEP_2'] and current >= 1.15 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_2'] and current >= 1.15 * T.codes[code]['last_price']):
+		if (T.codes[code]['type'] in ['BUY_AT_STEP_2'] and current >= 1.16 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_2'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_2'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
@@ -785,7 +787,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
-		if (T.codes[code]['type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_3'] and current >= 1.15 * T.codes[code]['last_price']):
+		if (T.codes[code]['type'] in ['BUY_AT_STEP_3'] and current >= 1.16 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_3'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_3'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
@@ -1131,7 +1133,7 @@ def log(*args):
 
 # recommends表格存放推荐股票数据, 包括股票代码, 股票名字, 是否有效, 推荐日期, 历史高点日期. records表格存放操作记录, 包括自增ID, 股票代码, 股票名字, 交易日期, 交易类型, 交易价格, 股数, 利润,和备注. recommends表上的股票代码对应records表的多条记录, 通过股票代码关联在一起. 
 def db_init():
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	conn = sqlite3.connect(T.qmt_db_path)
 	cursor = conn.cursor()
 
 	cursor.execute('''
@@ -1162,7 +1164,7 @@ def db_init():
 	conn.close()
 
 def db_load_all():
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	conn = sqlite3.connect(T.qmt_db_path)
 	df = pd.read_sql_query("""
 SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
 FROM recommends r
@@ -1177,7 +1179,7 @@ def db_insert_record(code, name, date=None, type=None, price=None, shares=None, 
 		log(f'db_insert_record(): 参数校验失败 - code={code}, name={name}, date={date}, type={type}, price={price}')
 		return
 	# 插入数据库
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/qmt.db')
+	conn = sqlite3.connect(T.qmt_db_path)
 	cursor = conn.cursor()
 	cursor.execute('INSERT INTO records (code, name, date, type, price, shares, profit, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
 				   (code, name, date, type, round(price, 2), shares, profit, comment))
