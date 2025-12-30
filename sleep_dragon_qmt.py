@@ -74,9 +74,16 @@ def init_load_codes_in_position(contextInfo):
 		# 		except:
 		# 			log(f'  {attr}: <无法获取>')
 		if code not in T.codes_in_position:
+			if dt.m_nVolume == 0:
+				log(f'init_load_codes_in_position(): {code} {dt.m_strInstrumentName} m_nVolume is 0, sold out today')
+				continue
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
-			T.codes_in_position[code]['last_buy_date'] = buy_dates.get(code, '')  # 使用成交日期
+			T.codes_in_position[code]['last_buy_date'] = dt.m_strOpenDate  # 使用成交日期
+			T.codes_in_position[code]['shares'] = dt.m_nVolume
+			T.codes_in_position[code]['price'] = dt.m_dOpenPrice
+			T.codes_in_position[code]['market_value'] = dt.m_dMarketValue
+			T.codes_in_position[code]['profit_rate'] = round(dt.m_dProfitRate * 100, 1)
 	df = pd.DataFrame.from_dict(T.codes_in_position, orient='index')
 	log(f'init_load_codes_in_position(): T.codes_in_position=\n{df.to_string()}')
 
@@ -259,8 +266,9 @@ def init_load_recommendations_from_db(contextInfo):
 			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "last_type" is invalid! T.codes[code]["last_type"]={T.codes[code]["last_type"]}, T.codes[code]["type"]={T.codes[code]["type"]}')
 			# T.codes[code]['last_type'] = 'BUY_AT_LOCAL_MIN'
 	# 判断在T.codes中有购买尚未卖出的记录是否在持仓股票中, 如果没有, 打印警告信息
-	
-	
+	for code in T.codes:
+		if T.codes[code]['last_buy_date'] is not None and code not in T.codes_in_position:
+			log(f'init_load_recommendations_from_db(): Warning! code {code} {T.codes[code]["name"]} has unsold buy records but not in position!')	
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
