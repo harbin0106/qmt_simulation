@@ -258,6 +258,9 @@ def init_load_recommendations_from_db(contextInfo):
 		if T.codes[code]['last_type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes[code]['type'] not in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
 			log(f'init_load_recommendations_from_db(): Error! code {code} {T.codes_in_position[code]["name"]} in position "last_type" is invalid! T.codes[code]["last_type"]={T.codes[code]["last_type"]}, T.codes[code]["type"]={T.codes[code]["type"]}')
 			# T.codes[code]['last_type'] = 'BUY_AT_LOCAL_MIN'
+	# 判断在T.codes中有购买尚未卖出的记录是否在持仓股票中, 如果没有, 打印警告信息
+	
+	
 
 def init_trade_parameters(contextInfo):
 	T.accountid_type = 'STOCK'
@@ -421,9 +424,9 @@ def trade_refine_codes(contextInfo):
 			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. max_high_20={max_high_20:.2f} < lateral_high={lateral_high:.2f}')
 			continue
 		# 判断是否停牌
-		if contextInfo.is_suspended_stock(code):
-			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} {T.CURRENT_DATE} 停牌!')
-			continue
+		# if contextInfo.is_suspended_stock(code):
+		# 	log(f'trade_on_handle_bar(): Warning! {code} {T.codes[code]["name"]} {T.CURRENT_DATE}停牌!')
+		# 	continue
 		# log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}, lateral_high={lateral_high:.2f}, closes[-1]={closes[-1]}')
 		filtered_codes[code] = T.codes[code]
 
@@ -546,6 +549,8 @@ def trade_on_handle_bar(contextInfo):
 		# 判断是否停牌
 		if contextInfo.is_suspended_stock(code):
 			log(f'trade_on_handle_bar(): Warning! {code} {T.codes[code]["name"]} {T.CURRENT_DATE}停牌!')
+			# 把当前code从T.codes里去除
+			del T.codes[code]
 			continue
 		# 获取当前的最新价格
 		if T.TARGET_DATE != '':
@@ -1035,7 +1040,7 @@ def order_callback(contextInfo, orderInfo):
 		name = T.codes[code]["name"]
 	else:
 		name = orderInfo.m_strInstrumentName
-		log(f'order_callback(): Warning! {code} {name} is not in T.codes! T.codes=\n{T.codes}')
+		log(f'order_callback(): Warning! {code} {name} is not in T.codes!')
 	# log(f'order_callback(): {code} {name}, m_nOrderStatus={orderInfo.m_nOrderStatus}, m_dLimitPrice={orderInfo.m_dLimitPrice}, m_nOpType={orderInfo.m_nOpType}, m_nVolumeTotalOriginal={orderInfo.m_nVolumeTotalOriginal}, m_nVolumeTraded={orderInfo.m_nVolumeTraded}')
 	# 检查委托状态并记录成交结果
 	if orderInfo.m_nOrderStatus == 56:  # 已成
@@ -1059,7 +1064,7 @@ def deal_callback(contextInfo, dealInfo):
 		name = T.codes[code]["name"]
 	else:
 		name = dealInfo.m_strInstrumentName
-		log(f'deal_callback(): Warning! {code} {name} is not in T.codes! T.codes=\n{T.codes}')
+		log(f'deal_callback(): Warning! {code} {name} is not in T.codes!')
 	# log(f'deal_callback(): {code} {name}, m_dPrice={dealInfo.m_dPrice}, m_dPrice={dealInfo.m_dPrice}, m_nVolume={dealInfo.m_nVolume}')
 	# 检查成交结果并记录
 	# log(f'deal_callback(): 成交确认 - 股票: {code} {name}, 成交ID: {dealInfo.m_strTradeID}, 成交价格: {dealInfo.m_dPrice:.2f}, 成交数量: {dealInfo.m_nVolume}, 成交金额: {dealInfo.m_dTradeAmount:.2f}, 买卖方向: {dealInfo.m_nDirection}')
@@ -1089,7 +1094,7 @@ def orderError_callback(contextInfo, passOrderInfo, msg):
 		name = T.codes[code]["name"]
 	else:
 		name = "未知股票"
-		log(f'orderError_callback(): Warning! {code} {name} is not in T.codes! T.codes=\n{T.codes}')
+		log(f'orderError_callback(): Warning! {code} {name} is not in T.codes!')
 	log(f'\norderError_callback(): 下单错误 - 股票: {code} {name}, 错误信息: {msg}')
 	# 可以在这里添加逻辑，如重试下单或发送警报
 
