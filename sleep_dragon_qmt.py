@@ -813,28 +813,38 @@ def trade_query_info(contextInfo):
 	for o in orders:
 		order_date = datetime.strptime(o.m_strInsertDate, '%Y%m%d').date()
 		if order_date >= N_days_ago:
-			log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 买卖方向: {o.m_nOffsetFlag}',
-			f'委托数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice:.2f} 元, 成交数量: {o.m_nVolumeTraded}, 成交金额: {o.m_dTradeAmount:.2f} 元, 委托时间: {o.m_strInsertDate}T{o.m_strInsertTime}')
+			if o.m_nOffsetFlag == 49:
+				direction = "卖出"
+			elif o.m_nOffsetFlag == 48:
+				direction = "买入"
+			else:
+				direction = o.m_nOffsetFlag
+			log(f'trade_query_info(): {o.m_strInstrumentID}.{o.m_strExchangeID} {o.m_strInstrumentName}, 委托方向: {direction}', f' 数量: {o.m_nVolumeTotalOriginal}, 成交均价: {o.m_dTradedPrice:.2f} 元, 成交数量: {o.m_nVolumeTraded}, 成交金额: {o.m_dTradeAmount:.2f} 元, 时间: {o.m_strInsertDate}T{o.m_strInsertTime.zfill(6)}')
 
 	deals = get_trade_detail_data(T.accountid, 'stock', 'deal')
 	log("trade_query_info(): 最近7天的成交记录:")
 	for dt in deals:
 		deal_date = datetime.strptime(dt.m_strTradeDate, '%Y%m%d').date()
 		if deal_date >= N_days_ago:
-			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 买卖方向: {dt.m_nOffsetFlag}',
-			f'成交价格: {dt.m_dPrice:.2f}, 成交数量: {dt.m_nVolume}, 成交金额: {dt.m_dTradeAmount:.2f} 元, 成交时间: {dt.m_strTradeDate}T{dt.m_strTradeTime}')
+			if dt.m_nOffsetFlag == 49:
+				direction = "卖出"
+			elif dt.m_nOffsetFlag == 48:
+				direction = "买入"
+			else:
+				direction = dt.m_nOffsetFlag
+			log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 成交方向: {direction}', f' 价格: {dt.m_dPrice:.2f}, 数量: {dt.m_nVolume}, 金额: {dt.m_dTradeAmount:.2f} 元, 时间: {dt.m_strTradeDate}T{dt.m_strTradeTime.zfill(6)}')
 
 	positions = get_trade_detail_data(T.accountid, 'stock', 'position')
 	log("trade_query_info(): 当前持仓状态:")
 	for dt in positions:
 		log(f'trade_query_info(): {dt.m_strInstrumentID}.{dt.m_strExchangeID} {dt.m_strInstrumentName}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
-		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
+		f' 成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.0f}, 持仓成本: {dt.m_dPositionCost:.0f}, 盈亏: {dt.m_dPositionProfit:.0f}')
 
 	accounts = get_trade_detail_data(T.accountid, 'stock', 'account')
 	log("trade_query_info(): 当前账户状态:")
 	for dt in accounts:
-		log(f'trade_query_info(): 总资产: {dt.m_dBalance:.2f}, 净资产: {dt.m_dAssureAsset:.2f}, 总市值: {dt.m_dInstrumentValue:.2f}',
-		f'总负债: {dt.m_dTotalDebit:.2f}, 可用金额: {dt.m_dAvailable:.2f} 元, 盈亏: {dt.m_dPositionProfit:.2f}')
+		log(f'trade_query_info(): 总资产: {dt.m_dBalance:.0f}, 净资产: {dt.m_dAssureAsset:.0f}, 总市值: {dt.m_dInstrumentValue:.0f}',
+		f' 总负债: {dt.m_dTotalDebit:.0f}, 可用金额: {dt.m_dAvailable:.0f} 元, 盈亏: {dt.m_dPositionProfit:.0f}')
 
 	return orders, deals, positions, accounts
 	
