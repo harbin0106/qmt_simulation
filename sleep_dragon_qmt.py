@@ -75,7 +75,7 @@ def init_load_codes_in_position(contextInfo):
 		# 			log(f'  {attr}: <无法获取>')
 		if code not in T.codes_in_position:
 			if dt.m_nVolume == 0:
-				log(f'init_load_codes_in_position(): {code} {dt.m_strInstrumentName} m_nVolume is 0, sold out today')
+				log(f'init_load_codes_in_position(): {code} {dt.m_strInstrumentName} m_nVolume == 0, sold out today')
 				continue
 			T.codes_in_position[code] = {}
 			T.codes_in_position[code]['name'] = dt.m_strInstrumentName
@@ -575,7 +575,7 @@ def trade_on_handle_bar(contextInfo):
 		else:
 			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			if market_data_last_price[code].empty:
-				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{bar_time}分笔线数据!')
+				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{current_time}分笔线数据!')
 				continue
 			current = round(market_data_last_price[code]['lastPrice'][0], 2)
 			if current == 0:
