@@ -311,7 +311,7 @@ def init_trade_parameters(contextInfo):
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
-	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt - 20251228 OK.db'
+	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt-20251230-simulation.db'
 	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
 
 def open_log_file(contextInfo):
@@ -667,7 +667,7 @@ def trade_on_handle_bar(contextInfo):
 				T.codes[code]['hold_days'] -= 1
 			continue
 		# 卖出：最高价大于1.21倍的local_min (从buy_date到当日)
-		if ((T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3']) or (T.codes[code]['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'])) and local_min != 0 and current >= 1.21 * local_min:
+		if ((T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']) or (T.codes[code]['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'])) and local_min != 0 and current >= 1.21 * local_min:
 			T.codes[code]['type'] = 'SELL_AT_LOCAL_MAX'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
