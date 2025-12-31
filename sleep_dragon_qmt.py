@@ -306,7 +306,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251203'
+	T.TARGET_DATE = '20251230'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes = None
 	# 用于过滤log
@@ -333,11 +333,13 @@ def trade_get_unified_growth_rate(contextInfo):
 	for code, group in grouped:
 		name = group['name'].iloc[0]
 		records = group.to_dict('records')
-		# 识别交易周期
+		# 获取所有 BUY_AT_LOCAL_MIN 的日期
+		buy_local_min_dates = sorted(set(r['date'] for r in records if r['type'] == 'BUY_AT_LOCAL_MIN'))
+		# 识别所有交易周期
 		trades = []
 		current_trade = None
 		for record in records:
-			if record['type'] == 'BUY_AT_LOCAL_MIN':
+			if record['type'] == 'BUY_AT_LOCAL_MIN' or (record['type'].startswith('BUY_AT_STEP_') and current_trade is None):
 				if current_trade is not None:
 					# 如果有未结束的交易，强制结束
 					trades.append(current_trade)
@@ -348,9 +350,8 @@ def trade_get_unified_growth_rate(contextInfo):
 					'sell_records': [],
 					'profit': None
 				}
-			elif record['type'] in ['BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3']:
-				if current_trade is not None:
-					current_trade['buy_records'].append(record)
+			elif record['type'].startswith('BUY_AT_STEP_') and current_trade is not None:
+				current_trade['buy_records'].append(record)
 			elif record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
 				if current_trade is not None:
 					current_trade['sell_records'].append(record)
@@ -358,6 +359,26 @@ def trade_get_unified_growth_rate(contextInfo):
 					current_trade['profit'] = record['profit']
 					trades.append(current_trade)
 					current_trade = None
+				else:
+					# 如果没有当前交易，查找对应的 BUY
+					buy_type = 'BUY_AT_LOCAL_MIN' if record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT'] else 'BUY_AT_LOCAL_MIN' if record['type'] == 'SELL_AT_STEP_0' else None
+					if buy_type:
+						# 查找最后一个 buy_type 记录
+						buy_record = None
+						for r in reversed(records[:records.index(record)]):
+							if r['type'] == buy_type:
+								buy_record = r
+								break
+						if buy_record:
+							current_trade = {
+								'start_date': buy_record['date'],
+								'end_date': record['date'],
+								'buy_records': [buy_record],
+								'sell_records': [record],
+								'profit': record['profit']
+							}
+							trades.append(current_trade)
+							current_trade = None
 			elif record['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
 				if current_trade is not None:
 					current_trade['sell_records'].append(record)
@@ -369,8 +390,34 @@ def trade_get_unified_growth_rate(contextInfo):
 						current_trade['profit'] = record['profit']
 						trades.append(current_trade)
 						current_trade = None
+				else:
+					# 如果没有当前交易，查找对应的 BUY
+					x = int(record['type'].split('_')[-1])
+					buy_type = f'BUY_AT_STEP_{x}'
+					# 查找最后一个 buy_type 记录
+					buy_record = None
+					for r in reversed(records[:records.index(record)]):
+						if r['type'] == buy_type:
+							buy_record = r
+							break
+					if buy_record:
+						current_trade = {
+							'start_date': buy_record['date'],
+							'end_date': record['date'],
+							'buy_records': [buy_record],
+							'sell_records': [record],
+							'profit': record['profit']
+						}
+						trades.append(current_trade)
+						current_trade = None
 		if current_trade is not None:
 			trades.append(current_trade)
+
+		# 调整 SELL_AT_LOCAL_MAX, SELL_AT_TIMEOUT 的起始日期
+		for trade in trades:
+			if trade['sell_records'] and trade['sell_records'][-1]['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT']:
+				if buy_local_min_dates:
+					trade['start_date'] = buy_local_min_dates.pop(0)
 
 		# 计算每笔交易的归一化日增长率
 		for trade in trades:
@@ -653,7 +700,7 @@ def trade_on_handle_bar(contextInfo):
 	current_time = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%H:%M:%S')
 	if not T.last_current_time or T.last_current_time.get('top') != current_time[:-3]:
 		T.last_current_time['top'] = current_time[:-3]
-		log(f'\t{current_time}')
+		# log(f'\t{current_time}')
 	# if T.MARKET_OPEN_TIME <= current_time <= T.TRANSACTION_CLOSE_TIME:
 	if current_time < T.MARKET_OPEN_TIME:
 		return
