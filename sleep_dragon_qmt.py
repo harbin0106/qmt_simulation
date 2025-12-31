@@ -333,124 +333,82 @@ def trade_get_unified_growth_rate(contextInfo):
 	for code, group in grouped:
 		name = group['name'].iloc[0]
 		records = group.to_dict('records')
-		# 获取所有 BUY_AT_LOCAL_MIN 的日期
-		buy_local_min_dates = sorted(set(r['date'] for r in records if r['type'] == 'BUY_AT_LOCAL_MIN'))
-		# 识别所有交易周期
-		trades = []
-		current_trade = None
-		for record in records:
-			if record['type'] == 'BUY_AT_LOCAL_MIN' or (record['type'].startswith('BUY_AT_STEP_') and current_trade is None):
-				if current_trade is not None:
-					# 如果有未结束的交易，强制结束
-					trades.append(current_trade)
-				current_trade = {
-					'start_date': record['date'],
-					'end_date': None,
-					'buy_records': [record],
-					'sell_records': [],
-					'profit': None
-				}
-			elif record['type'].startswith('BUY_AT_STEP_') and current_trade is not None:
-				current_trade['buy_records'].append(record)
-			elif record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
-				if current_trade is not None:
-					current_trade['sell_records'].append(record)
-					current_trade['end_date'] = record['date']
-					current_trade['profit'] = record['profit']
-					trades.append(current_trade)
-					current_trade = None
-				else:
-					# 如果没有当前交易，查找对应的 BUY
-					buy_type = 'BUY_AT_LOCAL_MIN' if record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT'] else 'BUY_AT_LOCAL_MIN' if record['type'] == 'SELL_AT_STEP_0' else None
-					if buy_type:
-						# 查找最后一个 buy_type 记录
-						buy_record = None
-						for r in reversed(records[:records.index(record)]):
-							if r['type'] == buy_type:
-								buy_record = r
-								break
-						if buy_record:
-							current_trade = {
-								'start_date': buy_record['date'],
-								'end_date': record['date'],
-								'buy_records': [buy_record],
-								'sell_records': [record],
-								'profit': record['profit']
-							}
-							trades.append(current_trade)
-							current_trade = None
-			elif record['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
-				if current_trade is not None:
-					current_trade['sell_records'].append(record)
-					# 检查是否有对应的 BUY
-					x = int(record['type'].split('_')[-1])
-					buy_type = f'BUY_AT_STEP_{x}'
-					if any(r['type'] == buy_type for r in current_trade['buy_records']):
-						current_trade['end_date'] = record['date']
-						current_trade['profit'] = record['profit']
-						trades.append(current_trade)
-						current_trade = None
-				else:
-					# 如果没有当前交易，查找对应的 BUY
-					x = int(record['type'].split('_')[-1])
-					buy_type = f'BUY_AT_STEP_{x}'
-					# 查找最后一个 buy_type 记录
-					buy_record = None
-					for r in reversed(records[:records.index(record)]):
-						if r['type'] == buy_type:
-							buy_record = r
-							break
-					if buy_record:
-						current_trade = {
-							'start_date': buy_record['date'],
-							'end_date': record['date'],
-							'buy_records': [buy_record],
-							'sell_records': [record],
-							'profit': record['profit']
-						}
-						trades.append(current_trade)
-						current_trade = None
-		if current_trade is not None:
-			trades.append(current_trade)
 
-		# 调整 SELL_AT_LOCAL_MAX, SELL_AT_TIMEOUT 的起始日期
-		for trade in trades:
-			if trade['sell_records'] and trade['sell_records'][-1]['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT']:
-				if buy_local_min_dates:
-					trade['start_date'] = buy_local_min_dates.pop(0)
+		# 识别交易周期：收集买入记录，当遇到卖出时记录交易
+		trades = []
+		buy_records = []
+		matched_buy_types = set()
+		i = 0
+		while i < len(records):
+			r = records[i]
+			if r['type'] == 'BUY_AT_LOCAL_MIN':
+				buy_records = [r]
+			elif r['type'].startswith('BUY_AT_STEP_'):
+				if buy_records:  # 只有在有 BUY_AT_LOCAL_MIN 后才添加
+					buy_records.append(r)
+			elif r['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
+				if buy_records:  # 只有有买入时才记录
+					sell_record = r
+					sell_type = sell_record['type']
+					if sell_type.startswith('SELL_AT_STEP_'):
+						x = sell_type.split('_')[-1]
+						if x == '0':
+							# SELL_AT_STEP_0 对应 BUY_AT_LOCAL_MIN
+							filtered_buy_records = [r for r in buy_records if r['type'] == 'BUY_AT_LOCAL_MIN']
+							# matched_buy_types.add('BUY_AT_LOCAL_MIN')
+						else:
+							buy_type = f'BUY_AT_STEP_{x}'
+							filtered_buy_records = [r for r in buy_records if r['type'] == 'BUY_AT_LOCAL_MIN' or r['type'] == buy_type]
+							matched_buy_types.add(buy_type)
+					else:
+						# SELL_AT_LOCAL_MAX, SELL_AT_TIMEOUT, SELL_AT_STEP_0
+						# 去掉buy_records里成对出现的BUY_AT_STEP_x和SELL_AT_STEP_x
+						filtered_buy_records = [r for r in buy_records if not (r['type'].startswith('BUY_AT_STEP_') and r['type'] in matched_buy_types)]
+					trades.append({
+						'buy_records': filtered_buy_records,
+						'sell_record': sell_record
+					})
+					# 如果是 SELL_AT_LOCAL_MAX 等，清除 buy_records
+					if sell_type in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
+						buy_records = []
+					# 对于 SELL_AT_STEP_x，不清除，因为只卖出部分
+			i += 1
+		log(f'trades={trades}')
 
 		# 计算每笔交易的归一化日增长率
 		for trade in trades:
-			if trade['end_date'] is None or trade['profit'] is None:
+			sell_record = trade['sell_record']
+			if sell_record['date'] is None or sell_record['profit'] is None:
+				log(f'Error! Invalid sell_record! {sell_record}')
 				continue
-			start_date = trade['start_date']
-			end_date = trade['end_date']
-			profit = trade['profit']
+			start_date = trade['buy_records'][0]['date']
+			end_date = sell_record['date']
+			profit = sell_record['profit']
+			shares = sell_record['shares']
 
-			# 计算交易日天数
+			# 计算交易日天数（中间经过的天数）
 			trading_dates = contextInfo.get_trading_dates(code, start_date, end_date, -1, '1d')
-			# days = len(trading_dates) - 1  # 减去起始日
+			days = len(trading_dates)
 			# if days <= 0:
 				# continue
-			days = len(trading_dates)
 
 			# 计算投入金额成本
 			cost = sum(r['price'] * r['shares'] for r in trade['buy_records'])
 
 			# 计算日增长率
-			if profit is not None:
+			if profit is not None and cost > 0:
 				total_return = 1 + profit / 100
 				daily_growth = total_return ** (1 / days) - 1
 			else:
 				continue
 
-			# 权重
+			# 权重：交易日天数 * 金额成本
 			weight = days * cost
 
 			# 获取卖出类型
-			sell_type = trade['sell_records'][-1]['type'] if trade['sell_records'] else None
+			sell_type = sell_record['type']
 
-			log(f"trade_get_unified_growth_rate(): 股票 {code} {name}, 交易从 {start_date} 到 {end_date}, 交易日天数 {days}, 卖出类型 {sell_type}, 日增长率 {daily_growth*100:.2f}%, 权重 {weight:.0f}")
+			log(f" {code} {name}, 交易从 {start_date} 到 {end_date}, 交易日天数 {days}, 卖出类型 {sell_type}, 日增长率 {daily_growth*100:.2f}%, 权重 {weight:.0f}")
 
 			total_weighted_growth += daily_growth * weight
 			total_weight += weight
