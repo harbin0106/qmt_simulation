@@ -306,13 +306,115 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = ''
+	T.TARGET_DATE = '20251203'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
-	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt-20251230-simulation.db'
-	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
+	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt-20251230-simulation.db'
+	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
+
+def trade_get_unified_growth_rate(contextInfo):
+	df_all = db_load_all()
+	df_records = df_all[df_all['date'].notna()].copy()  # 过滤出 records 记录
+	df_records = df_records[['code', 'name', 'id', 'date', 'type', 'price', 'shares', 'profit', 'comment']]
+	df_records = df_records.sort_values(['code', 'date', 'id'])
+
+	if df_records.empty:
+		log("trade_get_unified_growth_rate(): records 表格为空")
+		return 0.0
+
+	# 按股票代码分组
+	grouped = df_records.groupby('code')
+
+	total_weighted_growth = 0.0
+	total_weight = 0.0
+
+	for code, group in grouped:
+		name = group['name'].iloc[0]
+		records = group.to_dict('records')
+		# 识别交易周期
+		trades = []
+		current_trade = None
+		for record in records:
+			if record['type'] == 'BUY_AT_LOCAL_MIN':
+				if current_trade is not None:
+					# 如果有未结束的交易，强制结束
+					trades.append(current_trade)
+				current_trade = {
+					'start_date': record['date'],
+					'end_date': None,
+					'buy_records': [record],
+					'sell_records': [],
+					'profit': None
+				}
+			elif record['type'] in ['BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3']:
+				if current_trade is not None:
+					current_trade['buy_records'].append(record)
+			elif record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
+				if current_trade is not None:
+					current_trade['sell_records'].append(record)
+					current_trade['end_date'] = record['date']
+					current_trade['profit'] = record['profit']
+					trades.append(current_trade)
+					current_trade = None
+			elif record['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
+				if current_trade is not None:
+					current_trade['sell_records'].append(record)
+					# 检查是否有对应的 BUY
+					x = int(record['type'].split('_')[-1])
+					buy_type = f'BUY_AT_STEP_{x}'
+					if any(r['type'] == buy_type for r in current_trade['buy_records']):
+						current_trade['end_date'] = record['date']
+						current_trade['profit'] = record['profit']
+						trades.append(current_trade)
+						current_trade = None
+		if current_trade is not None:
+			trades.append(current_trade)
+
+		# 计算每笔交易的归一化日增长率
+		for trade in trades:
+			if trade['end_date'] is None or trade['profit'] is None:
+				continue
+			start_date = trade['start_date']
+			end_date = trade['end_date']
+			profit = trade['profit']
+
+			# 计算交易日天数
+			trading_dates = contextInfo.get_trading_dates(code, start_date, end_date, -1, '1d')
+			# days = len(trading_dates) - 1  # 减去起始日
+			# if days <= 0:
+				# continue
+			days = len(trading_dates)
+
+			# 计算投入金额成本
+			cost = sum(r['price'] * r['shares'] for r in trade['buy_records'])
+
+			# 计算日增长率
+			if profit is not None:
+				total_return = 1 + profit / 100
+				daily_growth = total_return ** (1 / days) - 1
+			else:
+				continue
+
+			# 权重
+			weight = days * cost
+
+			# 获取卖出类型
+			sell_type = trade['sell_records'][-1]['type'] if trade['sell_records'] else None
+
+			log(f"trade_get_unified_growth_rate(): 股票 {code} {name}, 交易从 {start_date} 到 {end_date}, 交易日天数 {days}, 卖出类型 {sell_type}, 日增长率 {daily_growth*100:.2f}%, 权重 {weight:.0f}")
+
+			total_weighted_growth += daily_growth * weight
+			total_weight += weight
+
+	if total_weight == 0:
+		log("trade_get_unified_growth_rate(): 无有效交易")
+		return 0.0
+
+	unified_growth_rate = total_weighted_growth / total_weight
+	log(f"trade_get_unified_growth_rate(): 归一化日增长率 = {unified_growth_rate*100:.2f}%")
+	return unified_growth_rate
 
 def open_log_file(contextInfo):
 	# 打开日志文件
@@ -384,6 +486,7 @@ def after_init(contextInfo):
 	# 计算lateral_high_date是否正确
 	trade_refine_codes(contextInfo)
 	# trade_get_recommendations(contextInfo)
+	trade_get_unified_growth_rate(contextInfo)
 	open_log_file(contextInfo)
 
 # def trade_get_recommendations(contextInfo):
@@ -570,7 +673,9 @@ def trade_on_handle_bar(contextInfo):
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
-			current = market_data_last_price[code]['low'][0]
+			current_low = market_data_last_price[code]['low'][0]
+			current_high = market_data_last_price[code]['high'][0]
+			current = current_low
 			if current == 0:
 				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
 				continue
@@ -579,7 +684,7 @@ def trade_on_handle_bar(contextInfo):
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的 {current_time} 分笔线数据!')
 				continue
-			current = round(market_data_last_price[code]['lastPrice'][0], 2)
+			current = current_high = current_low = round(market_data_last_price[code]['lastPrice'][0], 2)
 			if current == 0:
 				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
 				continue
@@ -647,11 +752,12 @@ def trade_on_handle_bar(contextInfo):
 			T.BUY_AMOUNT = cash / 10
 			log(f'T.BUY_AMOUNT={T.BUY_AMOUNT:.2f}')
 		# 每分钟打印一次数据值
-		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and True:
+		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and False:
 			T.last_current_time[code] = current_time[:-3]
 			log(f'{code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 
 		# 买入: 低于0.86倍的local_max. 全新推荐股票, 或者上次已经全部卖出的股票. 'type'为空, 当日无其它操作.
+		current = current_low
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in [None, 'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'] and current <= 0.86 * local_max and macd[-1] > 0:
 			T.codes[code]['type'] = 'BUY_AT_LOCAL_MIN'
 			T.codes[code]['price'] = current
@@ -667,6 +773,7 @@ def trade_on_handle_bar(contextInfo):
 				T.codes[code]['hold_days'] -= 1
 			continue
 		# 卖出：最高价大于1.21倍的local_min (从buy_date到当日)
+		current = current_high
 		if ((T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']) or (T.codes[code]['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'])) and local_min != 0 and current >= 1.21 * local_min:
 			T.codes[code]['type'] = 'SELL_AT_LOCAL_MAX'
 			T.codes[code]['price'] = current
@@ -683,6 +790,7 @@ def trade_on_handle_bar(contextInfo):
 				T.codes[code]['hold_days'] -= 1
 			continue
 		# 卖出: 持仓超过3天. T.codes[code]['hold_days']超过3个交易日
+		current = current_high
 		if current_time >= '10:04:00' and T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 4:
 			T.codes[code]['type'] = 'SELL_AT_TIMEOUT'
 			T.codes[code]['price'] = current
@@ -699,6 +807,7 @@ def trade_on_handle_bar(contextInfo):
 				T.codes[code]['hold_days'] -= 1
 			continue
 		# 买入: 多次台阶买入, 价格每下降0.1倍local_max就买入1次, 最多3次. 台阶是0.79倍, 0.70倍, 0.61倍.
+		current = current_low
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'SELL_AT_STEP_1'] and 0.70 * local_max <= current < 0.79 * local_max:
 			T.codes[code]['type'] = 'BUY_AT_STEP_1'
 			T.codes[code]['price'] = current
@@ -713,6 +822,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
+		current = current_low
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2'] and 0.61 * local_max <= current < 0.70 * local_max:
 			T.codes[code]['type'] = 'BUY_AT_STEP_2'
 			T.codes[code]['price'] = current
@@ -727,6 +837,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
+		current = current_low
 		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'SELL_AT_STEP_1', 'BUY_AT_STEP_2', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and current < 0.61 * local_max:
 			T.codes[code]['type'] = 'BUY_AT_STEP_3'
 			T.codes[code]['price'] = current
@@ -741,6 +852,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
+		current = current_high
 		# 卖出: 当日出现高于BUY_AT_STEP_x买入价的1.16倍时, 卖出此份股票. buy_price要从T.codes[code]['records']里枚举, 还包括当日买入的T.codes[code]['price']. 卖出时, 用SELL_AT_STEP_0标记
 		if (T.codes[code]['type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.16 * T.codes[code]['price'] and False) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_0'
@@ -757,6 +869,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
+		current = current_high
 		if (T.codes[code]['type'] in ['BUY_AT_STEP_1'] and current >= 1.16 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_1'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_1'
 			T.codes[code]['price'] = current
@@ -772,6 +885,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
+		current = current_high
 		if (T.codes[code]['type'] in ['BUY_AT_STEP_2'] and current >= 1.16 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_2'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_2'
 			T.codes[code]['price'] = current
@@ -787,6 +901,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
+		current = current_high
 		if (T.codes[code]['type'] in ['BUY_AT_STEP_3'] and current >= 1.16 * T.codes[code]['price']) or (T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_STEP_3'] and current >= 1.16 * T.codes[code]['last_price']):
 			T.codes[code]['type'] = 'SELL_AT_STEP_3'
 			T.codes[code]['price'] = current
