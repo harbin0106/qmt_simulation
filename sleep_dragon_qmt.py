@@ -22,10 +22,7 @@ def init(contextInfo):
 	# init_clear_log_file(contextInfo)
 	log('\n' + '=' * 40 + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + '=' * 40)
 	db_init()
-	init_load_codes_in_position(contextInfo)
-	# init_load_recommendations_from_excel(contextInfo)
-	init_load_recommendations_from_db(contextInfo)
-	contextInfo.set_universe(sorted(set(T.codes.keys())))
+	contextInfo.set_universe(init_load_codes(contextInfo))
 	contextInfo.set_account(T.accountid)
 	return
 	# Start the opening call auction timer
@@ -105,6 +102,15 @@ def init_load_recommendations_from_excel(contextInfo):
 		name = row['股票名称']
 		r_date = str(row['指定日期T'])
 		db_save_stock_status(code, name, r_date, r_date, None, None, None, None, 'Y', '', '')
+
+# 在init()函数里加载所有股票代码用于初始化
+def init_load_codes(contextInfo):
+	# 从数据库加载所有股票代码
+	df_all = db_load_all()
+	# 获取df_all里所有的codes作为列表返回
+	codes = df_all['code'].unique().tolist()
+	log(f'init_load_codes(): codes=\n{codes}')
+	return codes
 
 def init_load_recommendations_from_db(contextInfo):
 	T.codes = {}
@@ -306,7 +312,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.TARGET_DATE = '20251230'
+	T.TARGET_DATE = ''
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d') if T.TARGET_DATE == '' else T.TARGET_DATE
 	T.last_codes = None
 	# 用于过滤log
@@ -355,15 +361,16 @@ def trade_get_unified_growth_rate(contextInfo):
 						if x == '0':
 							# SELL_AT_STEP_0 对应 BUY_AT_LOCAL_MIN
 							filtered_buy_records = [r for r in buy_records if r['type'] == 'BUY_AT_LOCAL_MIN']
-							# matched_buy_types.add('BUY_AT_LOCAL_MIN')
+							# 去掉buy_records里'type'为'BUY_AT_LOCAL_MIN'的记录
+							buy_records = [r for r in buy_records if r['type'] != 'BUY_AT_LOCAL_MIN']
 						else:
 							buy_type = f'BUY_AT_STEP_{x}'
-							filtered_buy_records = [r for r in buy_records if r['type'] == 'BUY_AT_LOCAL_MIN' or r['type'] == buy_type]
-							matched_buy_types.add(buy_type)
+							filtered_buy_records = [r for r in buy_records if r['type'] == buy_type]
+							# 去掉buy_records里'type'为buy_type的记录
+							buy_records = [r for r in buy_records if r['type'] != buy_type]
 					else:
 						# SELL_AT_LOCAL_MAX, SELL_AT_TIMEOUT, SELL_AT_STEP_0
-						# 去掉buy_records里成对出现的BUY_AT_STEP_x和SELL_AT_STEP_x
-						filtered_buy_records = [r for r in buy_records if not (r['type'].startswith('BUY_AT_STEP_') and r['type'] in matched_buy_types)]
+						filtered_buy_records = buy_records
 					trades.append({
 						'buy_records': filtered_buy_records,
 						'sell_record': sell_record
@@ -373,42 +380,49 @@ def trade_get_unified_growth_rate(contextInfo):
 						buy_records = []
 					# 对于 SELL_AT_STEP_x，不清除，因为只卖出部分
 			i += 1
-		log(f'trades={trades}')
+		# log(f'trades={trades}')
 
 		# 计算每笔交易的归一化日增长率
 		for trade in trades:
 			sell_record = trade['sell_record']
 			if sell_record['date'] is None or sell_record['profit'] is None:
-				log(f'Error! Invalid sell_record! {sell_record}')
+				log(f'trade_get_unified_growth_rate(): Error! Invalid sell_record! sell_record["date"] is None or sell_record["profit"] is None! sell_records={sell_record} in trade={trade}')
 				continue
-			start_date = trade['buy_records'][0]['date']
-			end_date = sell_record['date']
-			profit = sell_record['profit']
-			shares = sell_record['shares']
+			# 对于sell_type为SELL_AT_STEP_1, SELL_AT_STEP_2, SELL_AT_STEP_3的记录, 选择buy_type为BUY_AT_STEP_1, BUY_AT_STEP_2, BUY_AT_STEP_3的日期作为起始日期
+			if sell_record['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
+				x = sell_record['type'].split('_')[-1]
+				buy_type = f'BUY_AT_STEP_{x}'
+				# 找到对应的买入记录
+				start_date = None
+				for buy_r in trade['buy_records']:
+					if buy_r['type'] == buy_type:
+						start_date = buy_r['date']
+						end_date = sell_record['date']
+						profit = sell_record['profit']
+						# 计算投入金额成本
+						cost = buy_r['price'] * buy_r['shares']
+						break
+			if sell_record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
+				# 从BUY_AT_LOCAL_MIN开始计算起始日期
+				start_date = trade['buy_records'][0]['date']
+				end_date = sell_record['date']
+				profit = sell_record['profit']
+				# 计算投入金额成本
+				cost = sum(r['price'] * r['shares'] for r in trade['buy_records'])
 
-			# 计算交易日天数（中间经过的天数）
+			# 计算交易日天数
 			trading_dates = contextInfo.get_trading_dates(code, start_date, end_date, -1, '1d')
 			days = len(trading_dates)
-			# if days <= 0:
-				# continue
 
-			# 计算投入金额成本
-			cost = sum(r['price'] * r['shares'] for r in trade['buy_records'])
-
+			if start_date is None or end_date is None or profit is None or cost < 0:
+				log(f'Error! Invalid start_date! Missing BUY_AT_STEP_x record! start_date is None or end_date is None or profit is None or cost < 0! start_date={start_date}, end_date={end_date}, profit={profit}, cost={cost} in trade={trade}')
+				return
 			# 计算日增长率
-			if profit is not None and cost > 0:
-				total_return = 1 + profit / 100
-				daily_growth = total_return ** (1 / days) - 1
-			else:
-				continue
-
+			total_return = 1 + profit / 100
+			daily_growth = total_return ** (1 / days) - 1
 			# 权重：交易日天数 * 金额成本
 			weight = days * cost
-
-			# 获取卖出类型
-			sell_type = sell_record['type']
-
-			log(f" {code} {name}, 交易从 {start_date} 到 {end_date}, 交易日天数 {days}, 卖出类型 {sell_type}, 日增长率 {daily_growth*100:.2f}%, 权重 {weight:.0f}")
+			log(f" {code} {name}, 交易从 {start_date} 到 {end_date}, 交易日天数 {days}, 卖出类型 {sell_record['type']}, 日增长率 {daily_growth*100:.2f}%, 权重 {weight:.0f}")
 
 			total_weighted_growth += daily_growth * weight
 			total_weight += weight
@@ -481,6 +495,10 @@ def on_timer(contextInfo):
 def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
+	# 不能在init()函数里调用contextInfo的API, 必须在after_init()里调用, 因为get_trade_dates()函数不能在init()里调用
+	init_load_codes_in_position(contextInfo)
+	# init_load_recommendations_from_excel(contextInfo)
+	init_load_recommendations_from_db(contextInfo)		
 	trade_query_info(contextInfo)
 	# trade_buy_stock_at_up_stop_price_by_amount(contextInfo, sorted(T.codes.keys())[0], 10000, 'test trade_buy_stock_at_up_stop_price_by_amount()')
 	# trade_buy_stock_by_amount(contextInfo, '002300.SZ', 10000000, '测试买入1千万')
@@ -492,7 +510,7 @@ def after_init(contextInfo):
 	trade_refine_codes(contextInfo)
 	# trade_get_recommendations(contextInfo)
 	trade_get_unified_growth_rate(contextInfo)
-	open_log_file(contextInfo)
+	# open_log_file(contextInfo)
 
 # def trade_get_recommendations(contextInfo):
 # 	query = f"2025年12月1日 百日新高 主板股票 非ST股票 股价小于15元"
