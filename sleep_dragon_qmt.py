@@ -314,13 +314,13 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-12-02 09:30:00'
-	T.BACK_TEST_END_DATE = '2025-12-31 15:00:00'
+	T.BACK_TEST_START_DATE = '2025-09-23 09:30:00'
+	T.BACK_TEST_END_DATE = '2025-10-23 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
-	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt-20251230-simulation.db'
+	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt-20260105-双涨停.db'
 	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
 
 def trade_get_unified_growth_rate(contextInfo):
@@ -435,7 +435,7 @@ def trade_get_unified_growth_rate(contextInfo):
 		return 0.0
 
 	unified_growth_rate = total_weighted_growth / total_weight
-	log(f"trade_get_unified_growth_rate(): 归一化日增长率 = {unified_growth_rate*100:.2f}%")
+	log(f"trade_get_unified_growth_rate(): 归一化日增长率 = {unified_growth_rate*100:.2f}%, total_weight={total_weight:.0f}")
 	return unified_growth_rate
 
 def open_log_file(contextInfo):
@@ -520,7 +520,7 @@ def after_init(contextInfo):
 # 	df = pywencai.get(query=query, query_type='stock', sort_order='desc', loop=True)
 # 	log(f'df=\n{df}')
 
-def trade_refine_codes(contextInfo):
+def trade_refine_codes1(contextInfo):
 	start_date = '20240418'
 	filtered_codes = {}
 	for code in sorted(set(T.codes.keys())):
@@ -567,6 +567,27 @@ def trade_refine_codes(contextInfo):
 		# 	log(f'trade_on_handle_bar(): Warning! {code} {T.codes[code]["name"]} {T.CURRENT_DATE}停牌!')
 		# 	continue
 		# log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}, lateral_high={lateral_high:.2f}, closes[-1]={closes[-1]}')
+		filtered_codes[code] = T.codes[code]
+
+	T.codes = filtered_codes
+	log(f'trade_refine_codes(): Filtered T.codes to {len(T.codes)} stocks that meet the condition.')
+
+def trade_refine_codes(contextInfo):
+	filtered_codes = {}
+	# 仅保留从recommend_date到T.CURRENT_DATE的交易日天数小于等于10天, 且没有在T.codes_in_position中的股票
+	for code in sorted(set(T.codes.keys())):
+		# 计算从recommend_date到T.CURRENT_DATE的交易日天数
+		trading_days = contextInfo.get_trading_dates(code, T.codes[code]['recommend_date'], T.CURRENT_DATE, -1, '1d')
+		# 检查records和last_buy_date是否匹配
+		if (T.codes[code]['records'] == [] and T.codes[code]['last_buy_date'] is not None) or (T.codes[code]['records'] != [] and T.codes[code]['last_buy_date'] is None):
+			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} Error! Records and last_buy_date mismatch! records={T.codes[code]["records"]}, last_buy_date={T.codes[code]["last_buy_date"]}')
+			continue
+		if len(trading_days) > 8 and code not in T.codes_in_position and T.codes[code]['records'] == []:
+			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. trading_days={len(trading_days)} > 8')
+			continue
+		# 去掉推荐日期在T.CURRENT_DATE之后的且不在仓的股票
+		if T.codes[code]['recommend_date'] > T.CURRENT_DATE and code not in T.codes_in_position:
+			continue
 		filtered_codes[code] = T.codes[code]
 
 	T.codes = filtered_codes
@@ -1026,30 +1047,30 @@ def trade_sell_stock_by_shares(contextInfo, code, shares, last_price, comment):
 	for dt in positions:
 		if f"{dt.m_strInstrumentID}.{dt.m_strExchangeID}" != code:
 			continue
-		log(f'trade_sell_stock():  {code} {T.codes[code]["name"]}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
+		log(f'trade_sell_stock_by_shares():  {code} {T.codes[code]["name"]}, 持仓量: {dt.m_nVolume}, 可用数量: {dt.m_nCanUseVolume}',
 		f'成本价: {dt.m_dOpenPrice:.2f}, 市值: {dt.m_dInstrumentValue:.2f}, 持仓成本: {dt.m_dPositionCost:.2f}, 盈亏: {dt.m_dPositionProfit:.2f}')
 		shares_in_stock = dt.m_nCanUseVolume  # 可卖数量
 		break
 	if shares_in_stock == 0:
-		log(f'trade_sell_stock(): {code} {T.codes[code]["name"]}, {comment}, Error! shares_in_stock == 0! 没有可卖的持仓，跳过卖出操作')
+		log(f'trade_sell_stock_by_shares(): {code} {T.codes[code]["name"]}, {comment}, Error! shares_in_stock == 0! 没有可卖的持仓，跳过卖出操作')
 		return
 	if shares > shares_in_stock:
-		log(f'trade_sell_stock(): {code} {T.codes[code]["name"]}, {comment}, Error! invalid parameter! shares > shares_in_stock! shares={shares}, shares_in_stock={shares_in_stock}')
+		log(f'trade_sell_stock_by_shares(): {code} {T.codes[code]["name"]}, {comment}, Error! invalid parameter! shares > shares_in_stock! shares={shares}, shares_in_stock={shares_in_stock}')
 		return
 	if shares % 100 != 0:
-		log(f'trade_sell_stock(): {code} {T.codes[code]["name"]}, {comment}, Error! invalid shares! shares % 100 != 0! shares={shares}')
+		log(f'trade_sell_stock_by_shares(): {code} {T.codes[code]["name"]}, {comment}, Error! invalid shares! shares % 100 != 0! shares={shares}')
 		return
 	# 通过指定价格卖出
 	# market_data = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', count=1, dividend_type='front', fill_data=False, subscribe=True)
 	# if code not in market_data or market_data[code].empty:
-	# 	log(f'trade_sell_stock(): Error! 无法获取{code} {T.codes[code]["name"]}的最新股价!')
+	# 	log(f'trade_sell_stock_by_shares(): Error! 无法获取{code} {T.codes[code]["name"]}的最新股价!')
 	# 	return
 	# last_price = market_data[code]['lastPrice'][0]
 	if last_price == 0 or last_price is None:
-		log(f'trade_sell_stock(): Error! Invalid last_price! last_price={last_price}')
+		log(f'trade_sell_stock_by_shares(): Error! Invalid last_price! last_price={last_price}')
 		return
 	passorder(T.opType_sell, T.orderType_volume, T.accountid, code, T.prType_designated, last_price, shares, T.strategyName, T.quickTrade, comment, contextInfo)
-	log(f'trade_sell_stock(): {code} {T.codes[code]["name"]}, {comment}, 以 {last_price:.2f} 元卖出 {shares} 股')
+	log(f'trade_sell_stock_by_shares(): {code} {T.codes[code]["name"]}, {comment}, 以 {last_price:.2f} 元卖出 {shares} 股')
 
 def trade_buy_stock_at_up_stop_price_by_amount(contextInfo, code, buy_amount, comment):
 	# log(f'trade_buy_stock_at_up_stop_price_by_amount(): {code} {T.codes[code]["name"]}, buy_amount={buy_amount:.2f}元')
