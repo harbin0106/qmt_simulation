@@ -396,7 +396,7 @@ def trade_get_unified_growth_rate(contextInfo):
 				x = sell_record['type'].split('_')[-1]
 				buy_type = f'BUY_AT_STEP_{x}'
 				# 找到对应的买入记录
-				start_date = None
+				start_date = end_date = profit = cost = None
 				for buy_r in trade['buy_records']:
 					if buy_r['type'] == buy_type:
 						start_date = buy_r['date']
@@ -413,7 +413,7 @@ def trade_get_unified_growth_rate(contextInfo):
 				# 计算投入金额成本
 				cost = sum(r['price'] * r['shares'] for r in trade['buy_records'])
 
-			if start_date is None or end_date is None or profit is None or cost < 0:
+			if start_date is None or end_date is None or profit is None or cost is None or cost < 0:
 				log(f'trade_get_unified_growth_rate(): Error!  None or profit is None or cost < 0! start_date={start_date}, end_date={end_date}, profit={profit}, cost={cost} in trade={trade}')
 				return
 			# 计算交易日天数
@@ -586,7 +586,7 @@ def trade_refine_codes(contextInfo):
 			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. trading_days={len(trading_days)} > 8')
 			continue
 		# 去掉推荐日期在T.CURRENT_DATE之后的且不在仓的股票
-		if T.codes[code]['recommend_date'] > T.CURRENT_DATE and code not in T.codes_in_position:
+		if T.codes[code]['recommend_date'] >= T.CURRENT_DATE and code not in T.codes_in_position:
 			continue
 		filtered_codes[code] = T.codes[code]
 
@@ -721,7 +721,7 @@ def trade_on_handle_bar(contextInfo):
 		# 获取当前的最新价格
 		if contextInfo.do_back_test:
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
-			market_data_last_price = contextInfo.get_market_data_ex(['high', 'low'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_last_price = contextInfo.get_market_data_ex(['high', 'low'], [code], period='5m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{bar_time}分钟线数据!')
@@ -844,7 +844,7 @@ def trade_on_handle_bar(contextInfo):
 			continue
 		# 卖出: 持仓超过3天. T.codes[code]['hold_days']超过3个交易日
 		current = current_high
-		if current_time >= '10:04:00' and T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 4:
+		if current_time >= '10:24:00' and T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'] and T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 4:
 			T.codes[code]['type'] = 'SELL_AT_TIMEOUT'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
