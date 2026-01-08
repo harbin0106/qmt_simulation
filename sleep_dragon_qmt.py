@@ -120,7 +120,7 @@ def init_load_recommendations_from_db(contextInfo):
 	# recommend_date = trade_get_previous_trade_date(contextInfo)
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
-	log(f'df_all=\n{df_all}')
+	log(f'df_all=\n{df_all.to_string()}')
 	# 判断recommend_date是否是数据库里的最新日期
 	# latest_recommend_date = df_all['recommend_date'].max()
 	# if recommend_date != latest_recommend_date:
@@ -156,8 +156,12 @@ def init_load_recommendations_from_db(contextInfo):
 				'profit': df.profit,
 				'comment': df.comment
 			}
+			# 判断record是否已经存在于T.codes[code]['records']中, 如果不存在则添加
+			existing_ids = {r['id'] for r in T.codes[code]['records'] if r['id'] is not None}
+			if record['id'] in existing_ids:
+				log(f'init_load_recommendations_from_db(): Error! Duplicate record id {record["id"]} for code {code} {df.name}, skipping addition.')
+				continue
 			T.codes[code]['records'].append(record)
-
 	for code in T.codes:
 		# 对于T.codes里每个code, 去掉T.codes['records']里'type'为'BUY_AT_LOCAL_MIN'的日期以前的记录. 当有多个'type'为'BUY_AT_LOCAL_MIN'的日期时, 以最近的日期为准. 去掉以'type' 'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'为最近日期结尾的所有记录. 当没有记录时, 保留code, 仅把T.codes[code]['records']置空
 		records = T.codes[code]['records']
@@ -314,13 +318,13 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-09-23 09:30:00'
-	T.BACK_TEST_END_DATE = '2025-10-23 15:00:00'
+	T.BACK_TEST_START_DATE = '2025-09-01 09:30:00'
+	T.BACK_TEST_END_DATE = '2026-01-07 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
-	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt-20260105-双涨停.db'
+	T.qmt_db_path = 'C:\\a\\trade\\量化\\中信证券\\code\\阿里log\\qmt20260107.db'
 	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
 
 def trade_get_unified_growth_rate(contextInfo):
@@ -1332,12 +1336,22 @@ def db_init():
 	conn.close()
 
 def db_load_all():
+	# 去掉recommend表格的recommend_date大于T.CURRENT_DATE的数据行, 去掉records表格的date大于T.CURRENT_DATE的数据行, 去掉recommend表格里code重复的且它的recommend_date较小的数据行.
 	conn = sqlite3.connect(T.qmt_db_path)
-	df = pd.read_sql_query("""
+	current_date = T.CURRENT_DATE
+	query = """
 SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
-FROM recommends r
-LEFT JOIN records rec ON r.code = rec.code
-""", conn)
+FROM (
+    SELECT *
+    FROM recommends r1
+    WHERE r1.recommend_date <= ?
+    AND NOT EXISTS (
+        SELECT 1 FROM recommends r2 WHERE r2.code = r1.code AND r2.recommend_date > r1.recommend_date
+    )
+) r
+LEFT JOIN records rec ON r.code = rec.code AND (rec.date IS NULL OR rec.date <= ?)
+"""
+	df = pd.read_sql_query(query, conn, params=(current_date, current_date))
 	conn.close()
 	return df
 
