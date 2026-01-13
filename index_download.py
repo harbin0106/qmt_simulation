@@ -1406,26 +1406,26 @@ def data_init_etf_db():
 	conn.commit()
 	conn.close()
 
-def data_save_stock_data(df):
-	"""保存股票数据到数据库，按照data_init_db()的表结构"""
+def data_save_etf_data(df):
+	"""保存ETF数据到数据库，按照data_init_etf_db()的表结构"""
 	if df is None or df.empty:
-		print(f'data_save_stock_data(): Error! df is None or df.empty')
+		print(f'data_save_etf_data(): Error! df is None or df.empty')
 		return
 	try:
-		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
+		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/etf_data.db')
 		cursor = conn.cursor()
 
-		# 提取股票信息
+		# 提取ETF信息
 		code = df['code'][0]
 		name = df['name'][0]
 
-		# 插入stocks表（如果不存在）
-		cursor.execute('INSERT OR IGNORE INTO stocks (code, name) VALUES (?, ?)', (code, name))
+		# 插入etfs表（如果不存在）
+		cursor.execute('INSERT OR IGNORE INTO etfs (code, name) VALUES (?, ?)', (code, name))
 
 		# 排序数据按日期
 		df_sorted = df.sort_values('date').reset_index(drop=True)
 
-		# 插入数据到stock_data表
+		# 插入数据到etf_data表
 		for _, row in df_sorted.iterrows():
 			date = row['date']
 			open = row['open']
@@ -1439,21 +1439,21 @@ def data_save_stock_data(df):
 			pe = row['pe']
 			circ_mv = row['circ_mv']
 
-			# 插入stock_data
-			cursor.execute('INSERT OR REPLACE INTO stock_data (code, date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (code, date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv))
+			# 插入etf_data
+			cursor.execute('INSERT OR REPLACE INTO etf_data (code, date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (code, date, open, high, low, close, pre_close, volume, amount, turnover_rate, pe, circ_mv))
 
 		conn.commit()
 		conn.close()
-		# print(f"data_save_stock_data(): 成功保存 {code} 数据，共 {len(df)} 条记录")
+		# print(f"data_save_etf_data(): 成功保存 {code} 数据，共 {len(df)} 条记录")
 	except Exception as e:
-		print(f"data_save_stock_data(): Error! 保存股票数据时出错: {e}")
+		print(f"data_save_etf_data(): Error! 保存ETF数据时出错: {e}")
 
-def data_download_single_stock_data(contextInfo, code, start_date, end_date):
+def data_download_single_etf_data(contextInfo, code, start_date, end_date):
 	"""
-	使用QMT接口获取单只股票的历史行情数据。
+	使用QMT接口获取单只ETF的历史行情数据。
 	参数:
 		contextInfo: QMT上下文
-		code: 股票代码 (如 '600000.SH' 或 '000001.SZ')
+		code: ETF代码 (如 '510050.SH' 或 '510300.SZ')
 		start_date: 开始日期 (YYYYMMDD)
 		end_date: 结束日期 (YYYYMMDD)
 	返回: DataFrame 或 None (如果出错)
@@ -1465,7 +1465,7 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 		# 用get_market_data_ex获取数据，包括close和pre_close
 		market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close', 'preClose', 'volume', 'amount'], [code], period='1d', start_time=start_date, end_time=end_date, count=-1, dividend_type='front', fill_data=False)
 		if code not in market_data or market_data[code].empty:
-			print(f'data_download_single_stock_data(): Error! 未获取到 {code} 的市场数据')
+			print(f'data_download_single_etf_data(): Error! 未获取到 {code} 的市场数据')
 			return None
 		# print(f'market_data=\n{market_data[code].head()}')
 		df = market_data[code].reset_index()
@@ -1479,19 +1479,20 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 		df['name'] = name
 
 		# 获取换手率
-		turnover_df = contextInfo.get_turnover_rate([code], start_date, end_date)
-		if not turnover_df.empty:
-			turnover_df['date'] = turnover_df.index.astype(str)
-			# 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
-			if code in turnover_df.columns:
-				turnover_df = turnover_df.rename(columns={code: 'turnover_rate'})
-				df = df.merge(turnover_df[['date', 'turnover_rate']], on='date', how='left')
-			else:
-				df['turnover_rate'] = None
-				print(f'data_download_single_stock_data(): Warning! {code} 的换手率数据列不存在')
-		else:
-			df['turnover_rate'] = None
-			print(f'data_download_single_stock_data(): Error! 未获取到 {code} 的换手率数据')
+		# turnover_df = contextInfo.get_turnover_rate([code], start_date, end_date)
+		# if not turnover_df.empty:
+		# 	turnover_df['date'] = turnover_df.index.astype(str)
+		# 	# 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
+		# 	if code in turnover_df.columns:
+		# 		turnover_df = turnover_df.rename(columns={code: 'turnover_rate'})
+		# 		df = df.merge(turnover_df[['date', 'turnover_rate']], on='date', how='left')
+		# 	else:
+		# 		df['turnover_rate'] = None
+		# 		print(f'data_download_single_etf_data(): Warning! {code} 的换手率数据列不存在')
+		# else:
+		# 	df['turnover_rate'] = None
+		# 	print(f'data_download_single_etf_data(): Error! 未获取到 {code} 的换手率数据')
+		df['turnover_rate'] = None
 
 		# 获取市盈率和流通市值
 		try:
@@ -1507,9 +1508,9 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 			else:
 				df['pe'] = None
 				df['circ_mv'] = None
-				print(f'data_download_single_stock_data(): Error! 未获取到 {code} 的财务数据')
+				print(f'data_download_single_etf_data(): Error! 未获取到 {code} 的财务数据')
 		except Exception as e:
-			print(f'data_download_single_stock_data(): Error! 获取 {code} 的财务数据失败: {e}')
+			print(f'data_download_single_etf_data(): Error! 获取 {code} 的财务数据失败: {e}')
 			df['pe'] = None
 			df['circ_mv'] = None
 
@@ -1518,7 +1519,7 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 
 		return df
 	except Exception as e:
-		print(f"data_download_single_stock_data(): Error! 获取 {code} 数据时出错: {e}")
+		print(f"data_download_single_etf_data(): Error! 获取 {code} 数据时出错: {e}")
 		return None
 
 def data_get_etf_list(contextInfo):
@@ -1568,8 +1569,8 @@ def data_dowload_etf(contextInfo):
 	if not all_codes:
 		print("data_dowload_etf(): Error! 无法获取ETF列表，退出")
 		return
-	return
-	total_stocks = len(all_codes)
+
+	total_etfs = len(all_codes)
 	successful_downloads = 0
 	failed_downloads = 0
 
@@ -1577,9 +1578,9 @@ def data_dowload_etf(contextInfo):
 		success = False
 		for attempt in range(3):  # 最多重试3次
 			try:
-				df = data_download_single_stock_data(contextInfo, code, start_date, end_date)
+				df = data_download_single_etf_data(contextInfo, code, start_date, end_date)
 				if df is not None and not df.empty:
-					data_save_stock_data(df)
+					data_save_etf_data(df)
 					success = True
 					successful_downloads += 1
 					break
@@ -1594,10 +1595,10 @@ def data_dowload_etf(contextInfo):
 			failed_downloads += 1
 
 		# 打印进度
-		progress = (i + 1) / total_stocks * 100
-		print(f"\r进度: {i + 1}/{total_stocks} ({progress:.1f}%) - 成功: {successful_downloads}, 失败: {failed_downloads}", end='')
+		progress = (i + 1) / total_etfs * 100
+		print(f"\r进度: {i + 1}/{total_etfs} ({progress:.1f}%) - 成功: {successful_downloads}, 失败: {failed_downloads}", end='')
 
-	print(f"\n下载完成! 总计: {total_stocks}, 成功: {successful_downloads}, 失败: {failed_downloads}")
+	print(f"\n下载完成! 总计: {total_etfs}, 成功: {successful_downloads}, 失败: {failed_downloads}")
 
 def data_load_stock(code, start_date='20200101'):
 	"""直接从数据库加载指定股票数据"""
