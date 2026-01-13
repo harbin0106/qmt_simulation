@@ -1600,23 +1600,23 @@ def data_dowload_etf(contextInfo):
 
 	print(f"\n下载完成! 总计: {total_etfs}, 成功: {successful_downloads}, 失败: {failed_downloads}")
 
-def data_load_stock(code, start_date='20200101'):
-	"""直接从数据库加载指定股票数据"""
+def data_load_etf(code, start_date='20200101'):
+	"""直接从数据库加载指定ETF数据"""
 	# 转换 code 到 code
 	if not code.endswith(('.SH', '.SZ', '.BJ')):
-		print(f'data_load_stock(): Error! 股票代码 {code} 格式不正确，缺少市场后缀(.SH/.SZ/.BJ)')
+		print(f'data_load_etf(): Error! ETF代码 {code} 格式不正确，缺少市场后缀(.SH/.SZ/.BJ)')
 		return pd.DataFrame()
 	code = code
 	columns = ['股票代码', '股票名称', '日期', '开盘', '收盘', '前收盘', '最高', '最低', '成交量', '成交额', '换手率', '市盈率', '流通市值']
 	try:
-		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
+		conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/etf_data.db')
 		cursor = conn.cursor()
 
-		# 查询指定股票数据
+		# 查询指定ETF数据
 		cursor.execute('''
 			SELECT d.code, d.date, d.open, d.high, d.low, d.close, d.pre_close, d.volume, d.amount, d.turnover_rate, d.pe, d.circ_mv, s.name
-			FROM stocks s
-			JOIN stock_data d ON s.code = d.code
+			FROM etfs s
+			JOIN etf_data d ON s.code = d.code
 			WHERE d.code = ? AND d.date >= ?
 			ORDER BY d.date
 		''', (code, start_date))
@@ -1644,10 +1644,14 @@ def data_load_stock(code, start_date='20200101'):
 			'circ_mv': '流通市值'
 		})
 		df = df.reset_index(drop=True)
+		print(f'df=\n{df.to_string()}')
 		return df
 	except Exception as e:
-		print(f"data_load_stock(): Error! 从数据库加载股票 {code} 数据失败: {e}")
+		print(f"data_load_etf(): Error! 从数据库加载ETF {code} 数据失败: {e}")
 		return pd.DataFrame(columns=columns)
 	finally:
 		if 'conn' in locals():
 			conn.close()
+
+if __name__ == "__main__":
+	data_load_etf('563530.SH', start_date='20230101')
