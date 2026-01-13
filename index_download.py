@@ -15,7 +15,7 @@ class T():
 T = T()
 
 def init(contextInfo):
-	T.download_mode = False
+	T.download_mode = True
 	if T.download_mode:
 		return
 	init_trade_parameters(contextInfo)
@@ -501,7 +501,8 @@ def on_timer(contextInfo):
 	
 def after_init(contextInfo):
 	if T.download_mode:
-		data_download_stock(contextInfo)
+		data_dowload_etf(contextInfo)
+		return
 	# 不能在init()函数里调用contextInfo的API, 必须在after_init()里调用, 因为get_trade_dates()函数不能在init()里调用
 	init_load_codes_in_position(contextInfo)
 	# init_load_recommendations_from_excel(contextInfo)
@@ -1369,22 +1370,22 @@ def db_insert_record(code, name, date=None, type=None, price=None, shares=None, 
 	conn.close()
 	log(f'db_insert_record(): code={code}, name={name}, date={date}, type={type}, price={price:.2f}, shares={shares}, profit={profit}, comment={comment}')
 	
-def data_init_db():
-	"""初始化股票SQLite数据库"""
-	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/stock_data.db')
+def data_init_etf_db():
+	"""初始化ETF SQLite数据库"""
+	conn = sqlite3.connect('C:/a/trade/量化/中信证券/code/etf_data.db')
 	cursor = conn.cursor()
 
-	# 创建股票表
+	# 创建ETF表
 	cursor.execute('''
-	CREATE TABLE IF NOT EXISTS stocks (
+	CREATE TABLE IF NOT EXISTS etfs (
 		code TEXT PRIMARY KEY,
 		name TEXT
 	)
 	''')
 
-	# 创建合并的股票数据表
+	# 创建合并的ETF数据表
 	cursor.execute('''
-	CREATE TABLE IF NOT EXISTS stock_data (
+	CREATE TABLE IF NOT EXISTS etf_data (
 		code TEXT,
 		date TEXT,
 		open REAL,
@@ -1398,7 +1399,7 @@ def data_init_db():
 		pe REAL,
 		circ_mv REAL,
 		PRIMARY KEY (code, date),
-		FOREIGN KEY (code) REFERENCES stocks(code)
+		FOREIGN KEY (code) REFERENCES etfs(code)
 	)
 	''')
 
@@ -1520,51 +1521,54 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 		print(f"data_download_single_stock_data(): Error! 获取 {code} 数据时出错: {e}")
 		return None
 
-def data_get_stock_list(contextInfo):
+def data_get_etf_list(contextInfo):
 	"""
-	获取A股股票代码列表，使用QMT API获取整个市场的股票列表，包括沪深两市，创业板，科创板，和北交所股票。
-	返回: 股票代码列表（带市场后缀，如 '600000.SH'）
+	获取A股ETF代码列表，使用QMT API获取整个市场的ETF列表，包括沪深两市，创业板，科创板，和北交所股票。
+	返回: ETF代码列表（带市场后缀，如 '600000.SH'）
 	"""
 	# 尝试获取整个A股市场的股票列表
 	# QMT API 支持 get_stock_list_in_sector，可以尝试使用 'A股' 或类似板块名
 	try:
-		all_codes = contextInfo.get_stock_list_in_sector('沪深A股')
+		all_codes = contextInfo.get_stock_list_in_sector('沪深ETF')
+		print(f"data_get_etf_list(): all_codes={all_codes}")
 	except:
 		# 如果都不支持，使用指数成份股作为近似
 		print("data_get_stock_list(): Error! QMT API 不支持直接获取完整A股列表!")
 		return []
 
-	# 筛选掉ST股票（通过名称过滤）
-	filtered_codes = []
-	for code in all_codes:
-		try:
-			name = get_stock_name(contextInfo, code)
-			if name and 'ST' not in name:
-				filtered_codes.append(code)
-		except:
-			print("data_get_stock_list(): Error! get_stock_name() exception!")
-			return []
+	# # 筛选掉ST股票（通过名称过滤）
+	# filtered_codes = []
+	# for code in all_codes:
+	# 	try:
+	# 		name = get_stock_name(contextInfo, code)
+	# 		print(f'name={name}')
+	# 		if name and 'ST' not in name:
+	# 			filtered_codes.append(code)
+	# 	except:
+	# 		print("data_get_stock_list(): Error! get_stock_name() exception!")
+	# 		return []
 
-	print(f"从QMT API获取并过滤后共发现 {len(filtered_codes)} 只股票. 过滤前总数: {len(all_codes)}")
-	return filtered_codes
+	print(f"从QMT API获取 {len(all_codes)} 只ETF")
+	return all_codes
 
-def data_download_stock(contextInfo):
+def data_dowload_etf(contextInfo):
 	"""
-	获取所有A股（沪深京）的股票代码列表，并保存到数据库。
+	获取所有A股（沪深京）的ETF代码列表，并保存到数据库。
 	使用QMT接口。
 	"""
 	end_date = date.today().strftime('%Y%m%d')
 	start_date = (date.today() - relativedelta(weeks=2)).strftime('%Y%m%d')
 
 	# 初始化数据库
-	data_init_db()
+	data_init_etf_db()
 
-	# 获取股票列表
-	all_codes = data_get_stock_list(contextInfo)
+	# 获取ETF列表
+	all_codes = data_get_etf_list(contextInfo)
+	print(f'data_download_eft(): all_codes={all_codes}')
 	if not all_codes:
-		print("data_download_stock(): Error! 无法获取股票列表，退出")
+		print("data_dowload_etf(): Error! 无法获取ETF列表，退出")
 		return
-
+	return
 	total_stocks = len(all_codes)
 	successful_downloads = 0
 	failed_downloads = 0
@@ -1582,11 +1586,11 @@ def data_download_stock(contextInfo):
 				else:
 					print(f"{code} 数据为空，重试中...")
 			except Exception as e:
-				print(f"data_download_stock(): Error! 获取 {code} 数据失败 (尝试 {attempt + 1}/3): {e}")
+				print(f"data_dowload_etf(): Error! 获取 {code} 数据失败 (尝试 {attempt + 1}/3): {e}")
 				continue
 
 		if not success:
-			print(f"data_download_stock(): Error! 获取 {code} 数据失败，已达到最大重试次数")
+			print(f"data_dowload_etf(): Error! 获取 {code} 数据失败，已达到最大重试次数")
 			failed_downloads += 1
 
 		# 打印进度
