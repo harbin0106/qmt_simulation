@@ -519,76 +519,19 @@ def after_init(contextInfo):
 	trade_get_unified_growth_rate(contextInfo)
 	# open_log_file(contextInfo)
 
-# def trade_get_recommendations(contextInfo):
-# 	query = f"2025年12月1日 百日新高 主板股票 非ST股票 股价小于15元"
-# 	df = pywencai.get(query=query, query_type='stock', sort_order='desc', loop=True)
-# 	log(f'df=\n{df}')
-
-def trade_refine_codes1(contextInfo):
-	start_date = '20240418'
-	filtered_codes = {}
-	for code in sorted(set(T.codes.keys())):
-		market_data_high = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=start_date, end_time=T.codes[code]['recommend_date'], count=-1, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data_high is None:
-			log(f'trade_refine_codes(): Error! market_data_high is None! {code}, {T.codes[code]["name"]}')
-			continue
-		# 获取当前交易日和昨日的收盘价
-		market_data_close = contextInfo.get_market_data_ex(['close'], [code], period='1d', end_time=T.CURRENT_DATE, count=2, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data_close is None:
-			log(f'trade_refine_codes(): Error! market_data_close is None! {code}, {T.codes[code]["name"]}')
-			continue
-		highs = market_data_high[code]['high'].astype(float)
-		if highs.empty:
-			log(f'trade_refine_codes(): Error! highs.empty! {code}, {T.codes[code]["name"]}')
-			continue
-		closes= market_data_close[code]['close'].astype(float)
-		lateral_high = max(highs)
-		lateral_high_dates = highs[highs == lateral_high].index
-		if T.codes[code]['lateral_high_date'] != lateral_high_dates[0] and T.codes[code]['lateral_high_date'] != lateral_high_dates[-1]:
-			log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}. Error! Invalid lateral_high_date! lateral_high_date={lateral_high_dates}, db={T.codes[code]["lateral_high_date"]}')
-			continue
-		# 过滤掉还没有接近水平突破线的股票
-		# if closes[0] < lateral_high * 0.9 and False:
-		# 	log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. closes[0]={closes[0]:.2f}')
-		# 	continue
-		# 过滤掉从昨日起前面20个交易日最高价没有超过lateral_high的股票
-		trading_dates = contextInfo.get_trading_dates(code, '', T.CURRENT_DATE, 21, '1d')
-		if len(trading_dates) < 21:
-			log(f'trade_refine_codes(): Error! 无法获取 {code} {T.codes[code]["name"]} 的足够交易日数据! trading_dates={trading_dates}')
-			continue
-		# 从昨日起前20个交易日：trading_dates[0] 到 trading_dates[19]
-		market_data_high_20 = contextInfo.get_market_data_ex(['high'], [code], period='1d', start_time=trading_dates[0], end_time=trading_dates[19], count=-1, dividend_type='front', fill_data=False, subscribe=True)
-		if code not in market_data_high_20 or market_data_high_20[code].empty:
-			log(f'trade_refine_codes(): Error! 无法获取 {code} {T.codes[code]["name"]} 的20日最高价数据!')
-			continue
-		highs_20 = market_data_high_20[code]['high'].astype(float)
-		max_high_20 = max(highs_20)
-		if max_high_20 < lateral_high:
-			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. max_high_20={max_high_20:.2f} < lateral_high={lateral_high:.2f}')
-			continue
-		# 判断是否停牌
-		# if contextInfo.is_suspended_stock(code):
-		# 	log(f'trade_on_handle_bar(): Warning! {code} {T.codes[code]["name"]} {T.CURRENT_DATE}停牌!')
-		# 	continue
-		# log(f'trade_refine_codes(): code={code}, name={T.codes[code]["name"]}, lateral_high={lateral_high:.2f}, closes[-1]={closes[-1]}')
-		filtered_codes[code] = T.codes[code]
-
-	T.codes = filtered_codes
-	log(f'trade_refine_codes(): Filtered T.codes to {len(T.codes)} stocks that meet the condition.')
-
 def trade_refine_codes(contextInfo):
 	filtered_codes = {}
 	# 仅保留从recommend_date到T.CURRENT_DATE的交易日天数小于等于10天, 且没有在T.codes_in_position中的股票
 	for code in sorted(set(T.codes.keys())):
 		# 计算从recommend_date到T.CURRENT_DATE的交易日天数
-		trading_days = contextInfo.get_trading_dates(code, T.codes[code]['recommend_date'], T.CURRENT_DATE, -1, '1d')
+		# trading_days = contextInfo.get_trading_dates(code, T.codes[code]['recommend_date'], T.CURRENT_DATE, -1, '1d')
 		# 检查records和last_buy_date是否匹配
 		if (T.codes[code]['records'] == [] and T.codes[code]['last_buy_date'] is not None) or (T.codes[code]['records'] != [] and T.codes[code]['last_buy_date'] is None):
 			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} Error! Records and last_buy_date mismatch! records={T.codes[code]["records"]}, last_buy_date={T.codes[code]["last_buy_date"]}')
 			continue
-		if len(trading_days) > 8 and code not in T.codes_in_position and T.codes[code]['records'] == []:
-			log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. trading_days={len(trading_days)} > 8')
-			continue
+		# if len(trading_days) > 8 and code not in T.codes_in_position and T.codes[code]['records'] == []:
+		# 	log(f'trade_refine_codes(): {code} {T.codes[code]["name"]} is removed from T.codes. trading_days={len(trading_days)} > 8')
+		# 	continue
 		# 去掉推荐日期在T.CURRENT_DATE之后的且不在仓的股票
 		if T.codes[code]['recommend_date'] >= T.CURRENT_DATE and code not in T.codes_in_position:
 			continue
