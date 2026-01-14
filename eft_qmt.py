@@ -316,8 +316,8 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-09-01 09:30:00'
-	T.BACK_TEST_END_DATE = '2026-01-07 15:00:00'
+	T.BACK_TEST_START_DATE = '2025-12-02 09:30:00'
+	T.BACK_TEST_END_DATE = '2026-01-14 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
 	# 用于过滤log
@@ -500,7 +500,6 @@ def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	# 不能在init()函数里调用contextInfo的API, 必须在after_init()里调用, 因为get_trade_dates()函数不能在init()里调用
-	db_insert_recommend('512980.SH', '传媒ETF', 'Y', '20260113', '20260113')
 	init_load_codes_in_position(contextInfo)
 	# init_load_recommendations_from_excel(contextInfo)
 	init_load_recommendations_from_db(contextInfo)		
@@ -1262,7 +1261,7 @@ def db_init():
 	conn.close()
 
 def db_load_all():
-	# 去掉recommend表格的recommend_date大于T.CURRENT_DATE的数据行, 去掉records表格的date大于T.CURRENT_DATE的数据行, 去掉recommend表格里code重复的且它的recommend_date较小的数据行.
+	# 去掉recommend表格的recommend_date大于T.CURRENT_DATE的数据行, 去掉records表格的date大于T.CURRENT_DATE的数据行, 去掉recommend表格里code重复的且它的recommend_date较小的数据行. 当records表格为空时, 也要返回recommend表格里的数据行, 只是这些数据行的records相关字段为None.
 	conn = sqlite3.connect(T.qmt_db_path)
 	current_date = T.CURRENT_DATE
 	query = """
@@ -1271,9 +1270,6 @@ FROM (
     SELECT *
     FROM recommends r1
     WHERE r1.recommend_date <= ?
-    AND NOT EXISTS (
-        SELECT 1 FROM recommends r2 WHERE r2.code = r1.code AND r2.recommend_date > r1.recommend_date
-    )
 ) r
 LEFT JOIN records rec ON r.code = rec.code AND (rec.date IS NULL OR rec.date <= ?)
 """
@@ -1586,3 +1582,8 @@ def data_load_stock(code, start_date='20200101'):
 	finally:
 		if 'conn' in locals():
 			conn.close()
+
+if __name__ == "__main__":
+	init_trade_parameters(None)
+	T.CURRENT_DATE = '20251202'
+	print(f'df={db_load_all()}')
