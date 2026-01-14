@@ -324,8 +324,7 @@ def init_trade_parameters(contextInfo):
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
-	T.qmt_db_path = 'C:\\a\\trade\\量化\\中信证券\\code\\阿里log\\qmt20260107.db'
-	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
+	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/eft_qmt.db'
 
 def trade_get_unified_growth_rate(contextInfo):
 	df_all = db_load_all()
@@ -503,6 +502,7 @@ def after_init(contextInfo):
 	if T.download_mode:
 		data_download_stock(contextInfo)
 	# 不能在init()函数里调用contextInfo的API, 必须在after_init()里调用, 因为get_trade_dates()函数不能在init()里调用
+	db_insert_recommend('512980.SH', '传媒ETF', 'Y', '20260113', '20260113')
 	init_load_codes_in_position(contextInfo)
 	# init_load_recommendations_from_excel(contextInfo)
 	init_load_recommendations_from_db(contextInfo)		
@@ -1368,6 +1368,20 @@ def db_insert_record(code, name, date=None, type=None, price=None, shares=None, 
 	conn.commit()
 	conn.close()
 	log(f'db_insert_record(): code={code}, name={name}, date={date}, type={type}, price={price:.2f}, shares={shares}, profit={profit}, comment={comment}')
+
+def db_insert_recommend(code, name, is_valid, recommend_date, lateral_high_date):
+    # 参数校验
+    if not code or not name or not recommend_date:
+        log(f'db_insert_recommend(): 参数校验失败 - code={code}, name={name}, recommend_date={recommend_date}')
+        return
+    # 插入数据库
+    conn = sqlite3.connect(T.qmt_db_path)
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR REPLACE INTO recommends (code, name, is_valid, recommend_date, lateral_high_date) VALUES (?, ?, ?, ?, ?)',
+                   (code, name, is_valid, recommend_date, lateral_high_date))
+    conn.commit()
+    conn.close()
+    log(f'db_insert_recommend(): code={code}, name={name}, is_valid={is_valid}, recommend_date={recommend_date}, lateral_high_date={lateral_high_date}')
 	
 def data_init_db():
 	"""初始化股票SQLite数据库"""
