@@ -1261,15 +1261,20 @@ def db_init():
 	conn.close()
 
 def db_load_all():
-	# 去掉recommend表格的recommend_date大于T.CURRENT_DATE的数据行, 去掉records表格的date大于T.CURRENT_DATE的数据行, 去掉recommend表格里code重复的且它的recommend_date较小的数据行. 当records表格为空时, 也要返回recommend表格里的数据行, 只是这些数据行的records相关字段为None.
+	# 先去掉recommend表格的recommend_date大于T.CURRENT_DATE的数据行, 再去掉recommend表格里code重复的且它的recommend_date较小的数据行, 最后去掉records表格的date大于T.CURRENT_DATE的数据行. 当records表格为空时, 也要返回recommend表格里的数据行, 只是这些数据行的records相关字段为None.
 	conn = sqlite3.connect(T.qmt_db_path)
 	current_date = T.CURRENT_DATE
 	query = """
 SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
 FROM (
-    SELECT *
+    SELECT r1.*
     FROM recommends r1
-    WHERE r1.recommend_date <= ?
+    INNER JOIN (
+        SELECT code, MAX(recommend_date) AS max_date
+        FROM recommends
+        WHERE recommend_date <= ?
+        GROUP BY code
+    ) r2 ON r1.code = r2.code AND r1.recommend_date = r2.max_date
 ) r
 LEFT JOIN records rec ON r.code = rec.code AND (rec.date IS NULL OR rec.date <= ?)
 """
@@ -1585,5 +1590,5 @@ def data_load_stock(code, start_date='20200101'):
 
 if __name__ == "__main__":
 	init_trade_parameters(None)
-	T.CURRENT_DATE = '20251202'
+	T.CURRENT_DATE = '20251205'
 	print(f'df={db_load_all()}')
