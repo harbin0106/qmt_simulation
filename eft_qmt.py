@@ -689,9 +689,13 @@ def trade_on_handle_bar(contextInfo):
 				T.codes[code]['high'] = current_high
 				T.codes[code]['high_is_changed'] = True
 
-			if current > T.codes[code]['low'] * 1.02 and T.codes[code]['low_is_changed']:
-				log(f'{current_time}, {code}, {T.codes[code]["name"]} BUY signal, low={T.codes[code]["low"]}, high={T.codes[code]["high"]}, close={current}')
+			if current_high > T.codes[code]['low'] * 1.02 and T.codes[code]['low_is_changed'] and T.codes[code]['high'] * 0.98 > T.codes[code]['low'] * (1.02 + 0.02):
+				log(f'{current_time}, {code}, {T.codes[code]["name"]} BUY signal, current={T.codes[code]["low"] * 1.02:.2f}')
 				T.codes[code]['low_is_changed'] = False
+			if current_low < T.codes[code]['high'] * 0.98 and T.codes[code]['high_is_changed'] and T.codes[code]['high'] * 0.98 > T.codes[code]['low'] * (1.02 + 0.02):
+				log(f'{current_time}, {code}, {T.codes[code]["name"]} SELL signal, current={T.codes[code]["high"] * 0.98:.2f}')
+				T.codes[code]['high_is_changed'] = False
+
 			if current == 0:
 				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
 				continue
