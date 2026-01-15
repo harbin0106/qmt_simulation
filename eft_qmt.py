@@ -641,6 +641,25 @@ def trade_get_average_price(contextInfo, code, sell_type):
 	averaged_price = total_cost / total_shares
 	return averaged_price
 
+def trade_get_last_buy_type(contextInfo, code):
+	# 先去掉成对出现的BUY_AT_STEP_x和SELL_AT_STEP_x记录
+	records = T.codes[code]['records']
+	buy_records = [r for r in records if r['type'].startswith('BUY_AT_')]
+	sell_records = [r for r in records if r['type'].startswith('SELL_AT_')]
+	# 去掉成对出现的记录
+	for sell_record in sell_records:
+		for buy_record in buy_records:
+			if buy_record['type'] == sell_record['type'].replace('SELL', 'BUY'):
+				buy_records.remove(buy_record)
+				break
+	# 获取最近一次买入的类型. 从T.codes[code]['records']里, 取日期最新的'type'为'BUY_AT_LOCAL_MIN'或者'BUY_AT_STEP_x'的记录的'type'.
+	if not buy_records:
+		log(f'trade_get_last_buy_type(): {code} {T.codes[code]["name"]} No buy records found!')
+		return None
+	# 按日期和id排序，取最新的记录
+	latest_buy_record = max(buy_records, key=lambda r: (r['date'], r['id']))
+	return latest_buy_record['type']
+
 def trade_on_handle_bar(contextInfo):
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if T.CURRENT_DATE != bar_date:
@@ -757,17 +776,20 @@ def trade_on_handle_bar(contextInfo):
 			T.last_current_time[code] = current_time[:-3]
 			log(f'{code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 
-		# 买入: 低于0.81倍的local_max. 全新推荐股票, 或者上次已经全部卖出的股票. 'type'为空, 当日无其它操作.
+		# 买入: 
 		current = current_low
 		if current > 1.02 * T.codes[code]['low'] and T.codes[code]['low_is_changed']:
-			if (T.codes[code]['type'] is None and T.codes[code]['last_type'] is None):
+			last_buy_type = trade_get_last_buy_type(contextInfo, code)
+			if last_buy_type is None:
 				T.codes[code]['type'] = 'BUY_AT_LOCAL_MIN'
-			elif (T.codes[code]['type'] is None and T.codes[code]['last_type'] == 'BUY_AT_LOCAL_MIN') or T.codes[code]['type'] == 'BUY_AT_LOCAL_MIN':
+			elif last_buy_type == 'BUY_AT_LOCAL_MIN':
 				T.codes[code]['type'] = 'BUY_AT_STEP_1'
-			elif (T.codes[code]['type'] is None and T.codes[code]['last_type'] == 'BUY_AT_STEP_1') or T.codes[code]['type'] == 'BUY_AT_STEP_1':
+			elif last_buy_type == 'BUY_AT_STEP_1':
 				T.codes[code]['type'] = 'BUY_AT_STEP_2'
-			elif (T.codes[code]['type'] is None and T.codes[code]['last_type'] == 'BUY_AT_STEP_2') or T.codes[code]['type'] == 'BUY_AT_STEP_2':
+			elif last_buy_type == 'BUY_AT_STEP_2':
 				T.codes[code]['type'] = 'BUY_AT_STEP_3'
+			elif last_buy_type == 'BUY_AT_STEP_3':
+				T.codes[code]['type'] = 'BUY_AT_STEP_4'
 
 			T.codes[code]['price'] = round(1.02 * T.codes[code]['low'], 2) if contextInfo.do_back_test else current
 			T.codes[code]['low_is_changed'] = False
@@ -782,7 +804,7 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None:
 				T.codes[code]['hold_days'] -= 1
 			continue
-		# 卖出：最高价大于1.18倍的local_min (从buy_date到当日)
+		# 卖出：
 		current = current_high
 		if current < 0.98 * T.codes[code]['high'] and T.codes[code]['high_is_changed'] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3']:
 			if T.codes[code]['last_type'] == 'BUY_AT_LOCAL_MIN':
