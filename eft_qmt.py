@@ -140,8 +140,10 @@ def init_load_recommendations_from_db(contextInfo):
 				'last_type': None,      # 上次交易类型
 				'hold_days': None,      # 持仓天数(去掉非成对的BUY_AT_STEP_x)
 				'records': [],           # 所有的操作历史记录
+				'low': None,
 				'high': None,
-				'low': None
+				'low_is_changed': False,
+				'high_is_changed': False,
 			}
 			if df.name != get_stock_name(contextInfo, df.code):
 				log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
@@ -666,17 +668,30 @@ def trade_on_handle_bar(contextInfo):
 		# 获取当前的最新价格
 		if contextInfo.do_back_test:
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
-			market_data_last_price = contextInfo.get_market_data_ex(['high', 'low'], [code], period='5m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_last_price = contextInfo.get_market_data_ex(['close', 'high', 'low'], [code], period='5m', start_time=bar_time, end_time=bar_time, count=-1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{bar_time}分钟线数据!')
 				continue
 			current_low = market_data_last_price[code]['low'][0]
 			current_high = market_data_last_price[code]['high'][0]
-			T.codes[code]['low'] = current_low if T.codes[code]['low'] is None else min(T.codes[code]['low'], current_low)
-			T.codes[code]['high'] = current_high if T.codes[code]['high'] is None else max(T.codes[code]['high'], current_high)
-			current = current_low
-			# log(f'{code}, {T.codes[code]["name"]} 1, market_data_last_price=\n{market_data_last_price[code]}, \nlow={T.codes[code]["low"]}, high={T.codes[code]["high"]}')
+			current = market_data_last_price[code]['close'][0]
+			if T.codes[code]['low'] is None:
+				T.codes[code]['low'] = current_low
+				T.codes[code]['low_is_changed'] = True
+			elif T.codes[code]['low'] > current_low:
+				T.codes[code]['low'] = current_low
+				T.codes[code]['low_is_changed'] = True
+			if T.codes[code]['high'] is None:
+				T.codes[code]['high'] = current_high
+				T.codes[code]['high_is_changed'] = True
+			elif T.codes[code]['high'] < current_high:
+				T.codes[code]['high'] = current_high
+				T.codes[code]['high_is_changed'] = True
+
+			if current > T.codes[code]['low'] * 1.02 and T.codes[code]['low_is_changed']:
+				log(f'{current_time}, {code}, {T.codes[code]["name"]} BUY signal, low={T.codes[code]["low"]}, high={T.codes[code]["high"]}, close={current}')
+				T.codes[code]['low_is_changed'] = False
 			if current == 0:
 				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
 				continue
