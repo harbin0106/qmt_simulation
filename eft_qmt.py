@@ -320,7 +320,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2026-01-07 09:30:00'
+	T.BACK_TEST_START_DATE = '2025-12-01 09:30:00'
 	T.BACK_TEST_END_DATE = '2026-01-15 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
@@ -351,42 +351,29 @@ def trade_get_unified_growth_rate(contextInfo):
 		# 识别交易周期：收集买入记录，当遇到卖出时记录交易
 		trades = []
 		buy_records = []
-		matched_buy_types = set()
 		i = 0
 		while i < len(records):
 			r = records[i]
-			if r['type'] == 'BUY_AT_STEP_0':
-				buy_records = [r]
-			elif r['type'].startswith('BUY_AT_STEP_'):
-				if buy_records:  # 只有在有 BUY_AT_STEP_0 后才添加
-					buy_records.append(r)
-			elif r['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
-				if buy_records:  # 只有有买入时才记录
-					sell_record = r
-					sell_type = sell_record['type']
-					if sell_type.startswith('SELL_AT_STEP_'):
-						x = sell_type.split('_')[-1]
-						if x == '0':
-							# SELL_AT_STEP_0 对应 BUY_AT_STEP_0
-							filtered_buy_records = [r for r in buy_records if r['type'] == 'BUY_AT_STEP_0']
-							# 去掉buy_records里'type'为'BUY_AT_STEP_0'的记录
-							buy_records = [r for r in buy_records if r['type'] != 'BUY_AT_STEP_0']
-						else:
-							buy_type = f'BUY_AT_STEP_{x}'
-							filtered_buy_records = [r for r in buy_records if r['type'] == buy_type]
-							# 去掉buy_records里'type'为buy_type的记录
-							buy_records = [r for r in buy_records if r['type'] != buy_type]
-					else:
-						# SELL_AT_LOCAL_MAX, SELL_AT_TIMEOUT, SELL_AT_STEP_0
-						filtered_buy_records = buy_records
-					trades.append({
-						'buy_records': filtered_buy_records,
-						'sell_record': sell_record
-					})
-					# 如果是 SELL_AT_LOCAL_MAX 等，清除 buy_records
-					if sell_type in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
-						buy_records = []
-					# 对于 SELL_AT_STEP_x，不清除，因为只卖出部分
+			if r['type'].startswith('BUY_AT_STEP_'):
+				buy_records.append(r)
+			elif r['type'].startswith('SELL_AT_'):
+				if buy_records == []:
+					log(f'trade_get_unified_growth_rate(): Error! Sell record without corresponding buy records! code={code}, name={name}, sell_record={r}')
+					return
+				sell_record = r
+				sell_type = sell_record['type']
+				if not sell_type.startswith('SELL_AT_STEP_'):
+					log(f'trade_get_unified_growth_rate(): Error! sell_record with type not starting with SELL_AT_STEP_! code={code}, name={name}, sell_record={sell_record}')
+					return
+				x = sell_type.split('_')[-1]
+				buy_type = f'BUY_AT_STEP_{x}'
+				filtered_buy_records = [r for r in buy_records if r['type'] == buy_type]
+				# 去掉buy_records里'type'为buy_type的记录
+				buy_records = [r for r in buy_records if r['type'] != buy_type]
+				trades.append({
+					'buy_records': filtered_buy_records,
+					'sell_record': sell_record
+				})
 			i += 1
 		# log(f'trades={trades}')
 
@@ -397,27 +384,21 @@ def trade_get_unified_growth_rate(contextInfo):
 				log(f'trade_get_unified_growth_rate(): Error! Invalid sell_record! sell_record["date"] is None or sell_record["profit"] is None! sell_records={sell_record} in trade={trade}')
 				continue
 			# 对于sell_type为SELL_AT_STEP_1, SELL_AT_STEP_2, SELL_AT_STEP_3的记录, 选择buy_type为BUY_AT_STEP_1, BUY_AT_STEP_2, BUY_AT_STEP_3的日期作为起始日期
-			if sell_record['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']:
-				x = sell_record['type'].split('_')[-1]
-				buy_type = f'BUY_AT_STEP_{x}'
-				# 找到对应的买入记录
-				start_date = end_date = profit = cost = None
-				for buy_r in trade['buy_records']:
-					if buy_r['type'] == buy_type:
-						start_date = buy_r['date']
-						end_date = sell_record['date']
-						profit = sell_record['profit']
-						# 计算投入金额成本
-						cost = buy_r['price'] * buy_r['shares']
-						break
-			if sell_record['type'] in ['SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0']:
-				# 从BUY_AT_STEP_0开始计算起始日期
-				start_date = trade['buy_records'][0]['date']
-				end_date = sell_record['date']
-				profit = sell_record['profit']
-				# 计算投入金额成本
-				cost = sum(r['price'] * r['shares'] for r in trade['buy_records'])
-
+			if not sell_record['type'].startswith('SELL_AT_STEP_'):
+				log(f'trade_get_unified_growth_rate(): Error! sell_record with type not starting with SELL_AT_STEP_! code={code}, name={name}, sell_record={sell_record}')
+				return
+			x = sell_record['type'].split('_')[-1]
+			buy_type = f'BUY_AT_STEP_{x}'
+			# 找到对应的买入记录
+			start_date = end_date = profit = cost = None
+			for buy_r in trade['buy_records']:
+				if buy_r['type'] == buy_type:
+					start_date = buy_r['date']
+					end_date = sell_record['date']
+					profit = sell_record['profit']
+					# 计算投入金额成本
+					cost = buy_r['price'] * buy_r['shares']
+					break
 			if start_date is None or end_date is None or profit is None or cost is None or cost < 0:
 				log(f'trade_get_unified_growth_rate(): Error!  None or profit is None or cost < 0! start_date={start_date}, end_date={end_date}, profit={profit}, cost={cost} in trade={trade}')
 				return
