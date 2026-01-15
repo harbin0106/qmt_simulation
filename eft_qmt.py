@@ -749,6 +749,10 @@ def trade_on_handle_bar(contextInfo):
 		current = current_low
 		if current > 1.02 * T.codes[code]['low'] and T.codes[code]['low_is_changed']:
 			T.codes[code]['low_is_changed'] = False
+			# 持仓超时时不再买入
+			if T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 20:
+				log(f'{current_time} {code} {T.codes[code]["name"]} 持仓超时{T.codes[code]["hold_days"]}天, 不再买入!')
+				continue
 			last_buy_type = trade_get_last_buy_type(contextInfo, code)
 			if last_buy_type is None:
 				T.codes[code]['type'] = 'BUY_AT_STEP_0'
@@ -763,9 +767,6 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
-			# 因为今天交易了, 所以持仓天数要减1
-			if T.codes[code]['hold_days'] is not None:
-				T.codes[code]['hold_days'] -= 1
 			continue
 		# 卖出：
 		current = current_high
@@ -785,27 +786,6 @@ def trade_on_handle_bar(contextInfo):
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
-			# 因为今天交易了, 所以持仓天数要减1
-			if T.codes[code]['hold_days'] is not None:
-				T.codes[code]['hold_days'] -= 1
-			continue
-		# 卖出: 持仓超过10天. T.codes[code]['hold_days']超过10个交易日
-		current = current_high
-		if current_time >= '10:24:00' and T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 10 and trade_get_last_sellable_buy_record(contextInfo, code) is not None:
-			last_sellable_buy_record = trade_get_last_sellable_buy_record(contextInfo, code)
-			T.codes[code]['type'] = 'SELL_AT_TIMEOUT'
-			T.codes[code]['price'] = current
-			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			shares = last_sellable_buy_record['shares']
-			average_price = last_sellable_buy_record['price']
-			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
-			T.codes[code]['records'].append(record)
-			# 因为今天交易了, 所以持仓天数要减1
-			if T.codes[code]['hold_days'] is not None:
-				T.codes[code]['hold_days'] -= 1
 			continue
 	# 打印变化的表格内容
 	if T.last_codes is None or T.last_codes != T.codes:
