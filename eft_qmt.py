@@ -139,7 +139,9 @@ def init_load_recommendations_from_db(contextInfo):
 				'type': None,           # 当日交易类型
 				'last_type': None,      # 上次交易类型
 				'hold_days': None,      # 持仓天数(去掉非成对的BUY_AT_STEP_x)
-				'records': []           # 所有的操作历史记录
+				'records': [],           # 所有的操作历史记录
+				'high': None,
+				'low': None
 			}
 			if df.name != get_stock_name(contextInfo, df.code):
 				log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
@@ -671,15 +673,19 @@ def trade_on_handle_bar(contextInfo):
 				continue
 			current_low = market_data_last_price[code]['low'][0]
 			current_high = market_data_last_price[code]['high'][0]
+			T.codes[code]['low'] = current_low if T.codes[code]['low'] is None else min(T.codes[code]['low'], current_low)
+			T.codes[code]['high'] = current_high if T.codes[code]['high'] is None else max(T.codes[code]['high'], current_high)
 			current = current_low
+			# log(f'{code}, {T.codes[code]["name"]} 1, market_data_last_price=\n{market_data_last_price[code]}, \nlow={T.codes[code]["low"]}, high={T.codes[code]["high"]}')
 			if current == 0:
 				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
 				continue
 		else:
-			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_last_price = contextInfo.get_market_data_ex(['lastPrice', 'high', 'low'], [code], period='tick', end_time=T.CURRENT_DATE, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的 {current_time} 分笔线数据!')
 				continue
+			# log(f'{code}, {T.codes[code]["name"]}, market_data_last_price=\n{market_data_last_price[code]}')
 			current = current_high = current_low = round(market_data_last_price[code]['lastPrice'][0], 2)
 			if current == 0:
 				log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} Invalid current price! current={current}')
@@ -740,7 +746,7 @@ def trade_on_handle_bar(contextInfo):
 
 		# 买入: 低于0.81倍的local_max. 全新推荐股票, 或者上次已经全部卖出的股票. 'type'为空, 当日无其它操作.
 		current = current_low
-		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in [None, 'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'] and current <= 0.81 * local_max and macd[-1] > 0:
+		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in [None, 'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'] and current <= 0.96 * local_max and macd[-1] > 0:
 			T.codes[code]['type'] = 'BUY_AT_LOCAL_MIN'
 			T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
