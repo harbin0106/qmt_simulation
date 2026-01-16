@@ -166,7 +166,7 @@ def init_load_recommendations_from_db(contextInfo):
 			T.codes[code]['records'].append(record)
 	for code in T.codes:
 		# 对于T.codes里每个code, 去掉T.codes['records']里'type'为'BUY_AT_STEP_0'的日期以前的记录. 当有多个'type'为'BUY_AT_STEP_0'的日期时, 以最近的日期为准. 去掉以'type' 'SELL_AT_LOCAL_MAX', 'SELL_AT_STEP_0'和'SELL_AT_TIMEOUT'为最近日期结尾的所有记录. 当没有记录时, 保留code, 仅把T.codes[code]['records']置空
-		records = T.codes[code]['records']
+		# records = T.codes[code]['records']
 		# if records:
 		# 	# 找到所有 'BUY_AT_STEP_0' 的记录
 		# 	buy_local_min_records = [r for r in records if r['type'] == 'BUY_AT_STEP_0']
@@ -185,28 +185,28 @@ def init_load_recommendations_from_db(contextInfo):
 		# T.codes[code]['records'] = records
 		
 		# 枚举T.codes所有的code, 把它的最近日期非T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['last_type']和T.codes_rocommended[code]['last_price']. 把T.CURRENT_DATE的'records'的内容复制给T.codes_rocommended[code]['type']和T.codes_rocommended[code]['price']. 对于日期相同的记录, 选择id最大的那个. 还要添加一个逻辑, 相邻和非相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消(x必须相同), 表示已经发生了完整买卖交易, 需要去除, 并覆盖T.codes[code]['records']. 剩下的记录再按照前面所述的逻辑复制给'last_type'和'last_price'.
-		# records = T.codes[code]['records']
+		records = T.codes[code]['records']
 		# 过滤相邻和非相邻的'BUY_AT_STEP_x'和'SELL_AT_STEP_x'互相抵消的记录
-		# buy_dict = defaultdict(list)
-		# sell_dict = defaultdict(list)
-		# for r in records:
-		# 	if r['type'].startswith('BUY_AT_STEP_'):
-		# 		x = r['type'].split('_')[-1]
-		# 		buy_dict[x].append(r)
-		# 	elif r['type'].startswith('SELL_AT_STEP_'):
-		# 		x = r['type'].split('_')[-1]
-		# 		sell_dict[x].append(r)
-		# removed_ids = set()
-		# for x in buy_dict:
-		# 	buy_list = sorted(buy_dict[x], key=lambda r: r['id'])
-		# 	sell_list = sorted(sell_dict[x], key=lambda r: r['id'])
-		# 	min_len = min(len(buy_list), len(sell_list))
-		# 	for i in range(min_len):
-		# 		removed_ids.add(buy_list[i]['id'])
-		# 		removed_ids.add(sell_list[i]['id'])
-		# filtered_records = [r for r in records if r['id'] not in removed_ids]
-		# T.codes[code]['records'] = filtered_records
-		# records = filtered_records
+		buy_dict = defaultdict(list)
+		sell_dict = defaultdict(list)
+		for r in records:
+			if r['type'].startswith('BUY_AT_STEP_'):
+				x = r['type'].split('_')[-1]
+				buy_dict[x].append(r)
+			elif r['type'].startswith('SELL_AT_STEP_'):
+				x = r['type'].split('_')[-1]
+				sell_dict[x].append(r)
+		removed_ids = set()
+		for x in buy_dict:
+			buy_list = sorted(buy_dict[x], key=lambda r: r['id'])
+			sell_list = sorted(sell_dict[x], key=lambda r: r['id'])
+			min_len = min(len(buy_list), len(sell_list))
+			for i in range(min_len):
+				removed_ids.add(buy_list[i]['id'])
+				removed_ids.add(sell_list[i]['id'])
+		filtered_records = [r for r in records if r['id'] not in removed_ids]
+		T.codes[code]['records'] = filtered_records
+		records = filtered_records
 
 		if records:
 			# 非T.CURRENT_DATE的记录
