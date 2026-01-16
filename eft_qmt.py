@@ -120,7 +120,7 @@ def init_load_recommendations_from_db(contextInfo):
 	# recommend_date = trade_get_previous_trade_date(contextInfo)
 	# 从数据库加载上一个交易日的推荐股票
 	df_all = db_load_all()
-	log(f'df_all=\n{df_all.to_string()}')
+	# log(f'df_all=\n{df_all.to_string()}')
 	# 判断recommend_date是否是数据库里的最新日期
 	# latest_recommend_date = df_all['recommend_date'].max()
 	# if recommend_date != latest_recommend_date:
@@ -327,7 +327,7 @@ def init_trade_parameters(contextInfo):
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
 	T.SLOPE = np.log(1.07)
-	T.BUY_THRESHOLD = 1.02
+	T.BUY_THRESHOLD = 1.04
 	T.SELL_THRESHOLD = 0.98
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
@@ -762,7 +762,7 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
+			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, comment=f'{current_time}')
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
 			continue
@@ -781,7 +781,7 @@ def trade_on_handle_bar(contextInfo):
 			average_price = last_sellable_buy_record['price']
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
+			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit, comment=f'{current_time}')
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
 			continue
