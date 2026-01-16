@@ -368,6 +368,9 @@ def trade_get_unified_growth_rate(contextInfo):
 				x = sell_type.split('_')[-1]
 				buy_type = f'BUY_AT_STEP_{x}'
 				filtered_buy_records = [r for r in buy_records if r['type'] == buy_type]
+				if filtered_buy_records == []:
+					log(f'trade_get_unified_growth_rate(): Error! No corresponding buy record for sell record! code={code}, name={name}, sell_record={sell_record}')
+					return
 				# 去掉buy_records里'type'为buy_type的记录
 				buy_records = [r for r in buy_records if r['type'] != buy_type]
 				trades.append({
@@ -604,7 +607,7 @@ def trade_get_last_buy_type(contextInfo, code):
 	# 			break
 	# 获取最近一次买入的类型. 从T.codes[code]['records']里, 取日期最新的'type'为'BUY_AT_STEP_0'或者'BUY_AT_STEP_x'的记录的'type'.
 	if not buy_records:
-		log(f'trade_get_last_buy_type(): {code} {T.codes[code]["name"]} No buy records found!')
+		# log(f'trade_get_last_buy_type(): {code} {T.codes[code]["name"]} No buy records found!')
 		return None
 	# 按日期和id排序，取最新的记录
 	latest_buy_record = max(buy_records, key=lambda r: (r['date'], r['id']))
@@ -713,7 +716,7 @@ def trade_on_handle_bar(contextInfo):
 		# if len(ma5_derivative_normalized) == 0:
 		# 	log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} 的len(ma5_derivative_normalized) == 0!')
 		# 	continue
-		macd, macdsignal, macdhist = ta.MACD(np.array(closes), fastperiod=12, slowperiod=26, signalperiod=9)
+		# macd, macdsignal, macdhist = ta.MACD(np.array(closes), fastperiod=12, slowperiod=26, signalperiod=9)
 		if T.BUY_AMOUNT is None:
 			cash = trade_get_cash(contextInfo)
 			if cash is None: 
@@ -724,7 +727,7 @@ def trade_on_handle_bar(contextInfo):
 		# 每分钟打印一次数据值
 		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and False:
 			T.last_current_time[code] = current_time[:-3]
-			log(f'{code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
+			log(f'{code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 
 		# 买入: 
 		current = current_low
@@ -741,7 +744,7 @@ def trade_on_handle_bar(contextInfo):
 				x = last_buy_type.split('_')[-1]
 				T.codes[code]['type'] = f'BUY_AT_STEP_{int(x)+1}'
 			T.codes[code]['price'] = round(1.02 * T.codes[code]['low'], 2) if contextInfo.do_back_test else current
-			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
+			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
@@ -759,7 +762,7 @@ def trade_on_handle_bar(contextInfo):
 			x = last_sellable_buy_record['type'].split('_')[-1]
 			T.codes[code]['type'] = f'SELL_AT_STEP_{int(x)}'
 			T.codes[code]['price'] = round(0.98 * T.codes[code]['high'], 2) if contextInfo.do_back_test else current
-			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, macd[-1]={macd[-1]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
+			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = last_sellable_buy_record['shares']
 			average_price = last_sellable_buy_record['price']
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
