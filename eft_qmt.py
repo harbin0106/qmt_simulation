@@ -256,6 +256,18 @@ def init_load_recommendations_from_db(contextInfo):
 				T.codes[code]['last_buy_date'] = latest_buy_date
 		else:
 			T.codes[code]['last_buy_date'] = None
+	
+	# 去掉T.codes[code]里'records'为空且recommend_date早于T.CURRENT_DATE 3个交易日的code
+	for code in list(T.codes.keys()):
+		records = T.codes[code]['records']
+		if not records:
+			recommend_date = T.codes[code]['recommend_date']
+			trading_dates = contextInfo.get_trading_dates(code, recommend_date, T.CURRENT_DATE, -1, '1d')
+			if len(trading_dates) < 3:
+				log(f'init_load_recommendations_from_db(): Removing code {code} {T.codes[code]["name"]} with empty records and recommend_date {recommend_date} less than 3 trading days before T.CURRENT_DATE {T.CURRENT_DATE}.')
+				del T.codes[code]
+				continue
+
 	# 枚举T.codes所有的code, 计算每个T.codes[code]['hold_days']. 计算规则如下: 对于每个'records'交易记录, 起始日期的'type'为'BUY_AT_STEP_0'. 从起始日期到T.CURRENT_DATE的交易日的天数, 减去中间有交易的日期天数, 赋值给T.codes[code]['hold_days']. 注意: 当日有买入和卖出交易的, 算作一天, 不能算作两天.
 	for code in T.codes:
 		last_buy_date = T.codes[code]['last_buy_date']
