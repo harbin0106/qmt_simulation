@@ -327,6 +327,8 @@ def init_trade_parameters(contextInfo):
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
 	T.SLOPE = np.log(1.07)
+	T.BUY_THRESHOLD = 1.02
+	T.SELL_THRESHOLD = 0.98
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
@@ -743,7 +745,7 @@ def trade_on_handle_bar(contextInfo):
 
 		# 买入: 
 		current = current_low
-		if current > 1.02 * T.codes[code]['low'] and T.codes[code]['low_is_changed']:
+		if current > T.BUY_THRESHOLD * T.codes[code]['low'] and T.codes[code]['low_is_changed']:
 			T.codes[code]['low_is_changed'] = False
 			# 持仓超时时不再买入
 			if T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 20:
@@ -755,7 +757,7 @@ def trade_on_handle_bar(contextInfo):
 			else: 
 				x = last_buy_type.split('_')[-1]
 				T.codes[code]['type'] = f'BUY_AT_STEP_{int(x)+1}'
-			T.codes[code]['price'] = round(1.02 * T.codes[code]['low'], 2) if contextInfo.do_back_test else current
+			T.codes[code]['price'] = round(T.BUY_THRESHOLD * T.codes[code]['low'], 2) if contextInfo.do_back_test else current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
@@ -766,14 +768,14 @@ def trade_on_handle_bar(contextInfo):
 			continue
 		# 卖出：
 		current = current_high
-		if current < 0.98 * T.codes[code]['high'] and T.codes[code]['high_is_changed']:
+		if current < T.SELL_THRESHOLD * T.codes[code]['high'] and T.codes[code]['high_is_changed']:
 			T.codes[code]['high_is_changed'] = False
 			last_sellable_buy_record = trade_get_last_sellable_buy_record(contextInfo, code)
 			if last_sellable_buy_record is None:
 				continue
 			x = last_sellable_buy_record['type'].split('_')[-1]
 			T.codes[code]['type'] = f'SELL_AT_STEP_{int(x)}'
-			T.codes[code]['price'] = round(0.98 * T.codes[code]['high'], 2) if contextInfo.do_back_test else current
+			T.codes[code]['price'] = round(T.SELL_THRESHOLD * T.codes[code]['high'], 2) if contextInfo.do_back_test else current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = last_sellable_buy_record['shares']
 			average_price = last_sellable_buy_record['price']
@@ -786,7 +788,7 @@ def trade_on_handle_bar(contextInfo):
 	# 打印变化的表格内容
 	if T.last_codes is None or T.last_codes != T.codes:
 		# df = pd.DataFrame.from_dict(T.codes, orient='index')
-		log(f'T.codes=\n{T.codes}')
+		# log(f'T.codes=\n{T.codes}')
 		T.last_codes = copy.deepcopy(T.codes)
 
 def trade_query_info(contextInfo):
