@@ -545,7 +545,7 @@ def handlebar(contextInfo):
 	# bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M%S')
 	# log(f"handlebar(): bar_time={timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y-%m-%d %H:%M:%S')}")
 	# Validate period
-	if contextInfo.period != 'tick' and False:
+	if contextInfo.period != 'tick' and not contextInfo.do_back_test:
 		log(f'handlebar(): Error! contextInfo.period != "tick"! contextInfo.period={contextInfo.period}')
 		return
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')	
@@ -555,7 +555,7 @@ def handlebar(contextInfo):
 		init_load_recommendations_from_db(contextInfo)
 		# trade_refine_codes(contextInfo)
 		trade_get_unified_growth_rate(contextInfo)
-	# Skip history bars ####################################
+	# Skip history bars
 	if not contextInfo.is_last_bar() and not contextInfo.do_back_test:
 		# log(f'handlebar(): contextInfo.is_last_bar()={contextInfo.is_last_bar()}')
 		return
@@ -793,10 +793,14 @@ def trade_on_handle_bar(contextInfo):
 			# if last_sell_price is not None and (T.BUY_THRESHOLD + T.PROFIT_THRESHOLD) * T.codes[code]['low'] > last_sell_price:
 			# 	log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次卖出价={last_sell_price:.2f}, 当前买入价={T.BUY_THRESHOLD * T.codes[code]["low"]:.2f}, 不再买入!')
 			# 	continue
+			# 连续两天放天量不买入
+			if amount_ratios[-2] == 1.00 and amount_ratios[-3] == 1.00:
+				log(f'{current_time} {code} {T.codes[code]["name"]} 连续两天放天量, 不再买入!')
+				continue
 			last_buy_type = trade_get_last_buy_type(contextInfo, code)
 			if last_buy_type is None:
 				T.codes[code]['type'] = 'BUY_AT_STEP_0'
-			else: 
+			else:
 				x = last_buy_type.split('_')[-1]
 				T.codes[code]['type'] = f'BUY_AT_STEP_{int(x)+1}'
 			T.codes[code]['price'] = round(T.BUY_THRESHOLD * T.codes[code]['low'], 2) if contextInfo.do_back_test else current
