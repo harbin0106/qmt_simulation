@@ -822,6 +822,11 @@ def trade_on_handle_bar(contextInfo):
 			if (1 - T.PROFIT_THRESHOLD) * T.codes[code]['price'] < last_sellable_buy_record['price']:
 				log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次买入价={last_sellable_buy_record["price"]:.2f}, 当前卖出价={T.codes[code]["price"]:.2f}, 不再卖出!')
 				continue
+			# 比上次买入价的(1+T.PROFIT_THRESHOLD)还低，不卖出
+			last_buy_price = trade_get_last_buy_price(contextInfo, code)
+			if T.codes[code]['price'] < (1 + T.PROFIT_THRESHOLD) * last_buy_price:
+				log(f'{current_time} {code} {T.codes[code]["name"]} 当前卖出价={T.codes[code]["price"]:.2f} < 上次买入价的(1+T.PROFIT_THRESHOLD)={ (1 + T.PROFIT_THRESHOLD) * last_buy_price:.2f}, 不再卖出!')
+				continue
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = last_sellable_buy_record['shares']
 			average_price = last_sellable_buy_record['price']
