@@ -144,6 +144,9 @@ def init_load_recommendations_from_db(contextInfo):
 				'high': None,
 				'low_is_changed': False,
 				'high_is_changed': False,
+				'direction': None,
+				'merged_high': None,
+				'merged_low': None,
 			}
 			if df.name != get_stock_name(contextInfo, df.code):
 				log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
@@ -335,7 +338,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-10-01 09:30:00'
+	T.BACK_TEST_START_DATE = '2026-01-15 09:30:00'
 	T.BACK_TEST_END_DATE = '2026-01-15 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
@@ -664,6 +667,67 @@ def trade_get_last_buy_price(contextInfo, code):
 	latest_buy_record = max(buy_records, key=lambda r: (r['date'], r['id']))
 	return latest_buy_record['price']
 
+def trade_get_merged_kline(contextInfo, code):
+	# 先获取120根历史K线, 从第一根K线开始, 根据缠论规则合并K线, 到昨日K线为止. 根据缠论里股价运行方向的规则计算出direction并返回"rising", "falling" or "unknown", 以及最后一根合并后的K线的最高价和最低价.
+	try:
+		# 获取120根日线数据
+		market_data = contextInfo.get_market_data_ex(['open', 'high', 'low', 'close'], [code], period='1d', end_time=T.CURRENT_DATE, count=120, dividend_type='front', fill_data=False, subscribe=True)
+		if code not in market_data or market_data[code].empty:
+			log(f'trade_get_merged_kline(): Error! 未获取到{code}的市场数据!')
+			return None, None, None
+		df = market_data[code].reset_index()
+		# 确保数据按时间排序，从最早到最新
+		df = df.sort_values('stime').reset_index(drop=True)
+		# 去掉今天的数据，如果有的话
+		yesterday = (datetime.strptime(T.CURRENT_DATE, '%Y%m%d') - timedelta(days=1)).strftime('%Y%m%d')
+		df = df[df['stime'] <= yesterday]
+		if df.empty:
+			log(f'trade_get_merged_kline(): Error! {code} 没有足够的历史数据!')
+			return None, None, None
+		# 合并K线
+		merged_klines = []
+		for _, row in df.iterrows():
+			kline = {'high': row['high'], 'low': row['low'], 'open': row['open'], 'close': row['close']}
+			if not merged_klines:
+				merged_klines.append(kline)
+			else:
+				last = merged_klines[-1]
+				# 检查包含关系
+				if kline['high'] <= last['high'] and kline['low'] >= last['low']:
+					# 当前K线被前一根包含，合并
+					last['high'] = max(last['high'], kline['high'])
+					last['low'] = min(last['low'], kline['low'])
+				elif kline['high'] >= last['high'] and kline['low'] <= last['low']:
+					# 前一根K线被当前包含，合并
+					last['high'] = max(last['high'], kline['high'])
+					last['low'] = min(last['low'], kline['low'])
+				else:
+					# 不合并，添加新K线
+					merged_klines.append(kline)
+		if not merged_klines:
+			log(f'trade_get_merged_kline(): Error! {code} 合并后无K线!')
+			return None, None, None
+		# 获取合并后最后一根K线的最高价和最低价
+		last_kline = merged_klines[-1]
+		overall_high = last_kline['high']
+		overall_low = last_kline['low']
+		# 根据缠论规则确定运行方向：基于最后两根合并K线
+		if len(merged_klines) >= 2:
+			last_kline = merged_klines[-1]
+			prev_kline = merged_klines[-2]
+			if last_kline['high'] > prev_kline['high'] and last_kline['low'] > prev_kline['low']:
+				direction = 'rising'
+			elif last_kline['high'] < prev_kline['high'] and last_kline['low'] < prev_kline['low']:
+				direction = 'falling'
+			else:
+				direction = 'unknown'
+		else:
+			direction = 'unknown'
+		return direction, overall_high, overall_low
+	except Exception as e:
+		log(f'trade_get_merged_kline(): Error! {code} 处理失败: {e}')
+		return None, None, None
+	
 def trade_on_handle_bar(contextInfo):
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if T.CURRENT_DATE != bar_date:
@@ -688,6 +752,11 @@ def trade_on_handle_bar(contextInfo):
 			# 把当前code从T.codes里去除
 			del T.codes[code]
 			continue
+		# 获取当先缠论规则下的K线方向和最后一根缠论K线的最高价和最低价
+		if T.codes[code]['direction'] is None:
+			T.codes[code]['direction'], T.codes[code]['merged_high'], T.codes[code]['merged_low'] = trade_get_merged_kline(contextInfo, code)
+			log(f'trade_on_handle_bar(): {code} {T.codes[code]["name"]} direction={T.codes[code]["direction"]}, merged_high={T.codes[code]["merged_high"]}, merged_low={T.codes[code]["merged_low"]}')
+
 		# 获取当前的最新价格
 		if contextInfo.do_back_test:
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
