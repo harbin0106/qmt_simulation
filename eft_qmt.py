@@ -331,14 +331,14 @@ def init_trade_parameters(contextInfo):
 	# 算法参数
 	T.SLOPE = np.log(1.07)
 	T.BUY_THRESHOLD = 1.04
-	T.SELL_THRESHOLD = 0.98
-	T.PROFIT_THRESHOLD = 0.03
+	T.SELL_THRESHOLD = 0.99
+	T.PROFIT_THRESHOLD = 0.02
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2026-01-15 09:30:00'
+	T.BACK_TEST_START_DATE = '2025-10-01 09:30:00'
 	T.BACK_TEST_END_DATE = '2026-01-15 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
@@ -756,6 +756,9 @@ def trade_on_handle_bar(contextInfo):
 		if T.codes[code]['direction'] is None:
 			T.codes[code]['direction'], T.codes[code]['merged_high'], T.codes[code]['merged_low'] = trade_get_merged_kline(contextInfo, code)
 			log(f'trade_on_handle_bar(): {code} {T.codes[code]["name"]} direction={T.codes[code]["direction"]}, merged_high={T.codes[code]["merged_high"]}, merged_low={T.codes[code]["merged_low"]}')
+			if T.codes[code]['direction'] is None or T.codes[code]['merged_high'] is None or T.codes[code]['merged_low'] is None:
+				log(f'trade_on_handle_bar(): Error! T.codes[code]["direction"] is None or T.codes[code]["merged_high"] is None or T.codes[code]["merged_low"] is None!')
+				continue
 
 		# 获取当前的最新价格
 		if contextInfo.do_back_test:
@@ -862,9 +865,14 @@ def trade_on_handle_bar(contextInfo):
 			# if last_sell_price is not None and (T.BUY_THRESHOLD + T.PROFIT_THRESHOLD) * T.codes[code]['low'] > last_sell_price:
 			# 	log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次卖出价={last_sell_price:.2f}, 当前买入价={T.BUY_THRESHOLD * T.codes[code]["low"]:.2f}, 不再买入!')
 			# 	continue
-			# 连续两天放天量不买入
-			if amount_ratios[-2] == 1.00 and amount_ratios[-3] == 1.00:
-				log(f'{current_time} {code} {T.codes[code]["name"]} 连续两天放天量, 不再买入!')
+			
+            # 连续两天放天量不买入
+			# if amount_ratios[-2] == 1.00 and amount_ratios[-3] == 1.00:
+			# 	log(f'{current_time} {code} {T.codes[code]["name"]} 连续两天放天量, 不再买入!')
+			# 	continue
+			# 下跌趋势不买入
+			if T.codes[code]['direction'] == 'falling':
+				log(f'{current_time} {code} {T.codes[code]["name"]} 下跌趋势不买入! direction={ T.codes[code]["direction"]}')
 				continue
 			last_buy_type = trade_get_last_buy_type(contextInfo, code)
 			if last_buy_type is None:
