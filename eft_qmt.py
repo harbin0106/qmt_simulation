@@ -329,12 +329,13 @@ def init_trade_parameters(contextInfo):
 	T.SLOPE = np.log(1.07)
 	T.BUY_THRESHOLD = 1.04
 	T.SELL_THRESHOLD = 0.98
+	T.PROFIT_THRESHOLD = 0.03
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-12-01 09:30:00'
+	T.BACK_TEST_START_DATE = '2025-10-01 09:30:00'
 	T.BACK_TEST_END_DATE = '2026-01-15 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
@@ -627,6 +628,42 @@ def trade_get_last_buy_type(contextInfo, code):
 	latest_buy_record = max(buy_records, key=lambda r: (r['date'], r['id']))
 	return latest_buy_record['type']
 
+def trade_get_last_sell_price(contextInfo, code):
+	records = T.codes[code]['records']
+	# 去掉成对出现的BUY_AT_STEP_x和SELL_AT_STEP_x记录
+	buy_records = [r for r in records if r['type'].startswith('BUY_AT_')]
+	sell_records = [r for r in records if r['type'].startswith('SELL_AT_')]
+	# 去掉sell_records里成对出现的记录
+	for buy_record in buy_records:
+		for sell_record in sell_records:
+			if sell_record['type'] == buy_record['type'].replace('BUY', 'SELL'):
+				sell_records.remove(sell_record)
+				break
+	if not sell_records:
+		# log(f'trade_get_last_sell_price(): {code} {T.codes[code]["name"]} No sell records found!')
+		return None
+	# 按日期和id排序，取最新的记录
+	latest_sell_record = max(sell_records, key=lambda r: (r['date'], r['id']))
+	return latest_sell_record['price']
+
+def trade_get_last_buy_price(contextInfo, code):
+	records = T.codes[code]['records']
+	# 去掉成对出现的BUY_AT_STEP_x和SELL_AT_STEP_x记录
+	buy_records = [r for r in records if r['type'].startswith('BUY_AT_')]
+	sell_records = [r for r in records if r['type'].startswith('SELL_AT_')]
+	# 去掉buy_records里成对出现的记录
+	for sell_record in sell_records:
+		for buy_record in buy_records:
+			if buy_record['type'] == sell_record['type'].replace('SELL', 'BUY'):
+				buy_records.remove(buy_record)
+				break
+	if not buy_records:
+		# log(f'trade_get_last_buy_price(): {code} {T.codes[code]["name"]} No buy records found!')
+		return None
+	# 按日期和id排序，取最新的记录
+	latest_buy_record = max(buy_records, key=lambda r: (r['date'], r['id']))
+	return latest_buy_record['price']
+
 def trade_on_handle_bar(contextInfo):
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if T.CURRENT_DATE != bar_date:
@@ -751,6 +788,11 @@ def trade_on_handle_bar(contextInfo):
 			if T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 20:
 				log(f'{current_time} {code} {T.codes[code]["name"]} 持仓超时{T.codes[code]["hold_days"]}天, 不再买入!')
 				continue
+			# # 没有获利空间不再买入
+			# last_sell_price = trade_get_last_sell_price(contextInfo, code)
+			# if last_sell_price is not None and (T.BUY_THRESHOLD + T.PROFIT_THRESHOLD) * T.codes[code]['low'] > last_sell_price:
+			# 	log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次卖出价={last_sell_price:.2f}, 当前买入价={T.BUY_THRESHOLD * T.codes[code]["low"]:.2f}, 不再买入!')
+			# 	continue
 			last_buy_type = trade_get_last_buy_type(contextInfo, code)
 			if last_buy_type is None:
 				T.codes[code]['type'] = 'BUY_AT_STEP_0'
@@ -776,10 +818,14 @@ def trade_on_handle_bar(contextInfo):
 			x = last_sellable_buy_record['type'].split('_')[-1]
 			T.codes[code]['type'] = f'SELL_AT_STEP_{int(x)}'
 			T.codes[code]['price'] = round(T.SELL_THRESHOLD * T.codes[code]['high'], 2) if contextInfo.do_back_test else current
+			# 没有获利空间不卖出
+			if (1 - T.PROFIT_THRESHOLD) * T.codes[code]['price'] < last_sellable_buy_record['price']:
+				log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次买入价={last_sellable_buy_record["price"]:.2f}, 当前卖出价={T.codes[code]["price"]:.2f}, 不再卖出!')
+				continue
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 			shares = last_sellable_buy_record['shares']
 			average_price = last_sellable_buy_record['price']
-			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
+			profit = round((T.codes[code]['price'] - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
 			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit, comment=f'{current_time}')
 			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
