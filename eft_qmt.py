@@ -147,6 +147,10 @@ def init_load_recommendations_from_db(contextInfo):
 				'direction': None,
 				'merged_high': None,
 				'merged_low': None,
+				'local_min': None,
+				'local_max': None,
+				'amount_ratios[-2]': None,
+				'amount_ratios[-3]': None,		
 			}
 			if df.name != get_stock_name(contextInfo, df.code):
 				log(f'init_load_recommendations_from_db(): Error! Invalid stock name! {df.code} {df.name} get_stock_name(contextInfo, df.code)={get_stock_name(contextInfo, df.code)}')
@@ -798,51 +802,58 @@ def trade_on_handle_bar(contextInfo):
 		elif T.codes[code]['high'] < current_high:
 			T.codes[code]['high'] = current_high
 			T.codes[code]['high_is_changed'] = True	
-		# 获取120日的成交额
-		market_data_120 = contextInfo.get_market_data_ex(['amount', 'close', 'low', 'open', 'high'], [code], period='1d', end_time=T.CURRENT_DATE, count=120, dividend_type='front', fill_data=False, subscribe=True)
-		if market_data_120[code].empty:
-			log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的market_data_120数据!')
-			continue
-		# 转换成单位亿
-		amounts = market_data_120[code]['amount'] / 100000000
-		closes = market_data_120[code]['close']
-		# 获取今日开盘价, 昨日收盘价和昨日最低价
-		lows = market_data_120[code]['low']			
-		opens = market_data_120[code]['open']
-		highs = market_data_120[code]['high']
-		avg_amount_120 = amounts.mean()
-		# local_min是从T.codes[code]['last_buy_date']到当日lows值的最低值
-		buy_date = T.codes[code].get('last_buy_date')
-		if buy_date and buy_date in highs.index:
-			idx = highs.index.get_loc(buy_date)
-			local_max_slice = highs[idx - 2: idx]
-			local_max = max(local_max_slice) if len(local_max_slice) > 0 else highs.iloc[idx]
-		else:
-			local_max_slice = highs[-3 : -1]
-			local_max = max(local_max_slice) if len(local_max_slice) > 0 else highs.iloc[-1] if len(highs) > 0 else 0
-		if buy_date and buy_date in lows.index:
-			idx = lows.index.get_loc(buy_date)
-			local_min_slice = lows[idx : idx + 1]
-			local_min = min(local_min_slice) if len(local_min_slice) > 0 else lows.iloc[idx]
-		else:
-			local_min = 0
-		# 计算成交量相对量比
-		rolling_max = pd.Series(amounts).rolling(window=20).max().values
-		rolling_min = pd.Series(amounts).rolling(window=20).min().values
-		diff = rolling_max - rolling_min
-		amount_ratios = np.where(diff == 0, 1, (amounts - rolling_min) / diff)
-		amount_ratios = np.nan_to_num(amount_ratios, nan=0)
-		# 计算120日的rates
-		rates = closes.pct_change().dropna() * 100
-		# log(f'len(closes)={len(closes)}, len(rates)={len(rates)}')
-		# 计算5日均线的数值
-		# closes_ma5 = closes.rolling(window=5).mean()
-		# closes_ma5_derivative = closes_ma5.diff(1).dropna()
-		# ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
-		# if len(ma5_derivative_normalized) == 0:
-		# 	log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} 的len(ma5_derivative_normalized) == 0!')
-		# 	continue
-		# macd, macdsignal, macdhist = ta.MACD(np.array(closes), fastperiod=12, slowperiod=26, signalperiod=9)
+		
+		if T.codes[code]['local_min'] is None:
+			# 获取120日的成交额
+			market_data_120 = contextInfo.get_market_data_ex(['amount', 'close', 'low', 'open', 'high'], [code], period='1d', end_time=T.CURRENT_DATE, count=120, dividend_type='front', fill_data=False, subscribe=True)
+			if market_data_120[code].empty:
+				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的market_data_120数据!')
+				continue
+			# 转换成单位亿
+			amounts = market_data_120[code]['amount'] / 100000000
+			closes = market_data_120[code]['close']
+			# 获取今日开盘价, 昨日收盘价和昨日最低价
+			lows = market_data_120[code]['low']			
+			opens = market_data_120[code]['open']
+			highs = market_data_120[code]['high']
+			avg_amount_120 = amounts.mean()
+			# local_min是从T.codes[code]['last_buy_date']到当日lows值的最低值
+			buy_date = T.codes[code].get('last_buy_date')
+			if buy_date and buy_date in highs.index:
+				idx = highs.index.get_loc(buy_date)
+				local_max_slice = highs[idx - 2: idx]
+				local_max = max(local_max_slice) if len(local_max_slice) > 0 else highs.iloc[idx]
+			else:
+				local_max_slice = highs[-3 : -1]
+				local_max = max(local_max_slice) if len(local_max_slice) > 0 else highs.iloc[-1] if len(highs) > 0 else 0
+			if buy_date and buy_date in lows.index:
+				idx = lows.index.get_loc(buy_date)
+				local_min_slice = lows[idx : idx + 1]
+				local_min = min(local_min_slice) if len(local_min_slice) > 0 else lows.iloc[idx]
+			else:
+				local_min = 0
+			# 计算成交量相对量比
+			rolling_max = pd.Series(amounts).rolling(window=20).max().values
+			rolling_min = pd.Series(amounts).rolling(window=20).min().values
+			diff = rolling_max - rolling_min
+			amount_ratios = np.where(diff == 0, 1, (amounts - rolling_min) / diff)
+			amount_ratios = np.nan_to_num(amount_ratios, nan=0)
+			# 计算120日的rates
+			rates = closes.pct_change().dropna() * 100
+			# log(f'len(closes)={len(closes)}, len(rates)={len(rates)}')
+			# 计算5日均线的数值
+			# closes_ma5 = closes.rolling(window=5).mean()
+			# closes_ma5_derivative = closes_ma5.diff(1).dropna()
+			# ma5_derivative_normalized = closes_ma5_derivative / closes_ma5.shift(1)
+			# if len(ma5_derivative_normalized) == 0:
+			# 	log(f'trade_on_handle_bar(): Error! {code} {T.codes[code]["name"]} 的len(ma5_derivative_normalized) == 0!')
+			# 	continue
+			# macd, macdsignal, macdhist = ta.MACD(np.array(closes), fastperiod=12, slowperiod=26, signalperiod=9)
+			T.codes[code]['local_min'] = local_min
+			T.codes[code]['local_max'] = local_max
+			T.codes[code]['amount_ratios[-2]'] = amount_ratios[-2]
+			T.codes[code]['amount_ratios[-3]'] = amount_ratios[-3]
+
 		if T.BUY_AMOUNT is None:
 			cash = trade_get_cash(contextInfo)
 			if cash is None: 
@@ -853,7 +864,7 @@ def trade_on_handle_bar(contextInfo):
 		# 每分钟打印一次数据值
 		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and False:
 			T.last_current_time[code] = current_time[:-3]
-			log(f'{code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
+			log(f'{code} {T.codes[code]["name"]}, current={current:.2f}, amount_ratios[-2]={T.codes[code]["amount_ratios[-2]"]:.2f}, amount_ratios[-3]={T.codes[code]["amount_ratios[-3]"]:.2f}, local_max={T.codes[code]["local_max"]:.2f}, local_min={T.codes[code]["local_min"]:.2f}')
 
 		# 买入: 
 		current = current_low
@@ -884,7 +895,7 @@ def trade_on_handle_bar(contextInfo):
 				x = last_buy_type.split('_')[-1]
 				T.codes[code]['type'] = f'BUY_AT_STEP_{int(x)+1}'
 			T.codes[code]['price'] = round(T.BUY_THRESHOLD * T.codes[code]['low'], 2) if contextInfo.do_back_test else current
-			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
+			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, amount_ratios[-2]={T.codes[code]["amount_ratios[-2]"]:.2f}, amount_ratios[-3]={T.codes[code]["amount_ratios[-3]"]:.2f}, local_max={T.codes[code]["local_max"]:.2f}, local_min={T.codes[code]["local_min"]:.2f}')
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
@@ -912,7 +923,7 @@ def trade_on_handle_bar(contextInfo):
 				if T.codes[code]['price'] < (1 + T.PROFIT_THRESHOLD) * last_buy_price and T.codes[code]['direction'] == 'rising':
 					log(f'{current_time} {code} {T.codes[code]["name"]} 当前卖出价={T.codes[code]["price"]:.2f} < 上次买入价的(1+T.PROFIT_THRESHOLD)={ (1 + T.PROFIT_THRESHOLD) * last_buy_price:.2f}, 不再卖出!')
 					continue
-				log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
+				log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, amount_ratios[-2]={T.codes[code]["amount_ratios[-2]"]:.2f}, amount_ratios[-3]={T.codes[code]["amount_ratios[-3]"]:.2f}, local_max={T.codes[code]["local_max"]:.2f}, local_min={T.codes[code]["local_min"]:.2f}')
 				shares = last_sellable_buy_record['shares']
 				average_price = last_sellable_buy_record['price']
 				profit = round((T.codes[code]['price'] - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
