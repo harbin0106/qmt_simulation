@@ -589,7 +589,7 @@ def trade_get_cash(contextInfo):
 		return
 	return float(account[0].m_dAvailable)	
 
-def trade_get_last_sellable_buy_record(contextInfo, code):
+def trade_get_last_sellable_buy_records(contextInfo, code):
 	records = T.codes[code]['records']
 	# 先去掉成对出现的BUY_AT_STEP_x和SELL_AT_STEP_x记录
 	buy_records = [r for r in records if r['type'].startswith('BUY_AT_')]
@@ -601,16 +601,16 @@ def trade_get_last_sellable_buy_record(contextInfo, code):
 				buy_records.remove(buy_record)
 				break
 	if not buy_records:
-		log(f'trade_get_last_sellable_buy_type(): {code} {T.codes[code]["name"]} No sellable buy records found!')
+		# log(f'trade_get_last_sellable_buy_type(): {code} {T.codes[code]["name"]} No sellable buy records found!')
 		return None
 	# 再去掉当日的记录
 	buy_records = [r for r in buy_records if r['date'] < T.CURRENT_DATE]
 	if not buy_records:
-		log(f'trade_get_last_sellable_buy_type(): {code} {T.codes[code]["name"]} No sellable buy records found! 1')
+		# log(f'trade_get_last_sellable_buy_type(): {code} {T.codes[code]["name"]} No sellable buy records found! 1')
 		return None
-	# 按日期和id排序，取最早的记录
-	latest_buy_record = min(buy_records, key=lambda r: (r['date'], r['id']))
-	return latest_buy_record
+	# # 按日期和id排序，取最早的记录
+	# latest_buy_record = min(buy_records, key=lambda r: (r['date'], r['id']))
+	return buy_records
 
 def trade_get_last_buy_type(contextInfo, code):
 	# 先去掉成对出现的BUY_AT_STEP_x和SELL_AT_STEP_x记录
@@ -815,12 +815,15 @@ def trade_on_handle_bar(contextInfo):
 		buy_date = T.codes[code].get('last_buy_date')
 		if buy_date and buy_date in highs.index:
 			idx = highs.index.get_loc(buy_date)
-			local_max = max(highs[idx - 2: idx])
+			local_max_slice = highs[idx - 2: idx]
+			local_max = max(local_max_slice) if len(local_max_slice) > 0 else highs.iloc[idx]
 		else:
-			local_max = max(highs[-3 : -1])
+			local_max_slice = highs[-3 : -1]
+			local_max = max(local_max_slice) if len(local_max_slice) > 0 else highs.iloc[-1] if len(highs) > 0 else 0
 		if buy_date and buy_date in lows.index:
 			idx = lows.index.get_loc(buy_date)
-			local_min = min(lows[idx : idx + 1])
+			local_min_slice = lows[idx : idx + 1]
+			local_min = min(local_min_slice) if len(local_min_slice) > 0 else lows.iloc[idx]
 		else:
 			local_min = 0
 		# 计算成交量相对量比
@@ -866,7 +869,7 @@ def trade_on_handle_bar(contextInfo):
 			# 	log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次卖出价={last_sell_price:.2f}, 当前买入价={T.BUY_THRESHOLD * T.codes[code]["low"]:.2f}, 不再买入!')
 			# 	continue
 			
-            # 连续两天放天量不买入
+			# 连续两天放天量不买入
 			# if amount_ratios[-2] == 1.00 and amount_ratios[-3] == 1.00:
 			# 	log(f'{current_time} {code} {T.codes[code]["name"]} 连续两天放天量, 不再买入!')
 			# 	continue
@@ -893,29 +896,30 @@ def trade_on_handle_bar(contextInfo):
 		current = current_high
 		if current < T.SELL_THRESHOLD * T.codes[code]['high'] and T.codes[code]['high_is_changed']:
 			T.codes[code]['high_is_changed'] = False
-			last_sellable_buy_record = trade_get_last_sellable_buy_record(contextInfo, code)
-			if last_sellable_buy_record is None:
+			last_sellable_buy_records = trade_get_last_sellable_buy_records(contextInfo, code)
+			if last_sellable_buy_records is None:
 				continue
-			x = last_sellable_buy_record['type'].split('_')[-1]
-			T.codes[code]['type'] = f'SELL_AT_STEP_{int(x)}'
-			T.codes[code]['price'] = round(T.SELL_THRESHOLD * T.codes[code]['high'], 2) if contextInfo.do_back_test else current
-			# 没有获利空间不卖出
-			if (1 - T.PROFIT_THRESHOLD) * T.codes[code]['price'] < last_sellable_buy_record['price']:
-				log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次买入价={last_sellable_buy_record["price"]:.2f}, 当前卖出价={T.codes[code]["price"]:.2f}, 不再卖出!')
-				continue
-			# 比上次买入价的(1+T.PROFIT_THRESHOLD)还低，不卖出
-			last_buy_price = trade_get_last_buy_price(contextInfo, code)
-			if T.codes[code]['price'] < (1 + T.PROFIT_THRESHOLD) * last_buy_price:
-				log(f'{current_time} {code} {T.codes[code]["name"]} 当前卖出价={T.codes[code]["price"]:.2f} < 上次买入价的(1+T.PROFIT_THRESHOLD)={ (1 + T.PROFIT_THRESHOLD) * last_buy_price:.2f}, 不再卖出!')
-				continue
-			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
-			shares = last_sellable_buy_record['shares']
-			average_price = last_sellable_buy_record['price']
-			profit = round((T.codes[code]['price'] - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
-			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit, comment=f'{current_time}')
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
-			T.codes[code]['records'].append(record)
+			for last_sellable_buy_record in last_sellable_buy_records:
+				x = last_sellable_buy_record['type'].split('_')[-1]
+				T.codes[code]['type'] = f'SELL_AT_STEP_{int(x)}'
+				T.codes[code]['price'] = round(T.SELL_THRESHOLD * T.codes[code]['high'], 2) if contextInfo.do_back_test else current
+				# 上升趋势下, 没有获利空间不卖出
+				if (1 - T.PROFIT_THRESHOLD) * T.codes[code]['price'] < last_sellable_buy_record['price'] and T.codes[code]['direction'] == 'rising':
+					log(f'{current_time} {code} {T.codes[code]["name"]} 无获利空间, 上次买入价={last_sellable_buy_record["price"]:.2f}, 当前卖出价={T.codes[code]["price"]:.2f}, 不再卖出!')
+					continue
+				# 上升趋势下, 比上次买入价的(1+T.PROFIT_THRESHOLD)还低，不卖出
+				last_buy_price = trade_get_last_buy_price(contextInfo, code)
+				if T.codes[code]['price'] < (1 + T.PROFIT_THRESHOLD) * last_buy_price and T.codes[code]['direction'] == 'rising':
+					log(f'{current_time} {code} {T.codes[code]["name"]} 当前卖出价={T.codes[code]["price"]:.2f} < 上次买入价的(1+T.PROFIT_THRESHOLD)={ (1 + T.PROFIT_THRESHOLD) * last_buy_price:.2f}, 不再卖出!')
+					continue
+				log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
+				shares = last_sellable_buy_record['shares']
+				average_price = last_sellable_buy_record['price']
+				profit = round((T.codes[code]['price'] - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
+				trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
+				db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit, comment=f'{current_time}')
+				record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
+				T.codes[code]['records'].append(record)
 			continue
 	# 打印变化的表格内容
 	if T.last_codes is None or T.last_codes != T.codes:
@@ -1285,14 +1289,14 @@ def db_load_all():
 	query = """
 SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
 FROM (
-    SELECT r1.*
-    FROM recommends r1
-    INNER JOIN (
-        SELECT code, MAX(recommend_date) AS max_date
-        FROM recommends
-        WHERE recommend_date <= ?
-        GROUP BY code
-    ) r2 ON r1.code = r2.code AND r1.recommend_date = r2.max_date
+	SELECT r1.*
+	FROM recommends r1
+	INNER JOIN (
+		SELECT code, MAX(recommend_date) AS max_date
+		FROM recommends
+		WHERE recommend_date <= ?
+		GROUP BY code
+	) r2 ON r1.code = r2.code AND r1.recommend_date = r2.max_date
 ) r
 LEFT JOIN records rec ON r.code = rec.code AND (rec.date IS NULL OR rec.date <= ?)
 """
@@ -1315,18 +1319,18 @@ def db_insert_record(code, name, date=None, type=None, price=None, shares=None, 
 	log(f'db_insert_record(): code={code}, name={name}, date={date}, type={type}, price={price:.2f}, shares={shares}, profit={profit}, comment={comment}')
 
 def db_insert_recommend(code, name, is_valid, recommend_date, lateral_high_date):
-    # 参数校验
-    if not code or not name or not recommend_date:
-        log(f'db_insert_recommend(): 参数校验失败 - code={code}, name={name}, recommend_date={recommend_date}')
-        return
-    # 插入数据库
-    conn = sqlite3.connect(T.qmt_db_path)
-    cursor = conn.cursor()
-    cursor.execute('INSERT OR REPLACE INTO recommends (code, name, is_valid, recommend_date, lateral_high_date) VALUES (?, ?, ?, ?, ?)',
-                   (code, name, is_valid, recommend_date, lateral_high_date))
-    conn.commit()
-    conn.close()
-    log(f'db_insert_recommend(): code={code}, name={name}, is_valid={is_valid}, recommend_date={recommend_date}, lateral_high_date={lateral_high_date}')
+	# 参数校验
+	if not code or not name or not recommend_date:
+		log(f'db_insert_recommend(): 参数校验失败 - code={code}, name={name}, recommend_date={recommend_date}')
+		return
+	# 插入数据库
+	conn = sqlite3.connect(T.qmt_db_path)
+	cursor = conn.cursor()
+	cursor.execute('INSERT OR REPLACE INTO recommends (code, name, is_valid, recommend_date, lateral_high_date) VALUES (?, ?, ?, ?, ?)',
+				   (code, name, is_valid, recommend_date, lateral_high_date))
+	conn.commit()
+	conn.close()
+	log(f'db_insert_recommend(): code={code}, name={name}, is_valid={is_valid}, recommend_date={recommend_date}, lateral_high_date={lateral_high_date}')
 	
 def data_init_db():
 	"""初始化股票SQLite数据库"""
