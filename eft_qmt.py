@@ -437,7 +437,7 @@ def trade_get_unified_growth_rate(contextInfo):
 			daily_growth = total_return ** (1 / days) - 1
 			# 权重：交易日天数 * 金额成本
 			weight = days * cost
-			log(f" {code} {name}, 交易从 {start_date} 到 {end_date}, 交易日天数 {days}, 卖出类型 {sell_record['type']}, 日增长率 {daily_growth*100:.2f}%, 权重 {weight:.0f}")
+			log(f" {code} {name:8}, 交易从 {start_date} 到 {end_date}, 交易日天数 {days}, 卖出类型 {sell_record['type']}, 日增长率 {daily_growth*100:.2f}%, 权重 {weight:.0f}")
 
 			total_weighted_growth += daily_growth * weight
 			total_weight += weight
@@ -802,7 +802,7 @@ def trade_on_handle_bar(contextInfo):
 			T.codes[code]['high_is_changed'] = True
 		elif T.codes[code]['high'] < current_high:
 			T.codes[code]['high'] = current_high
-			T.codes[code]['high_is_changed'] = True	
+			T.codes[code]['high_is_changed'] = True
 		
 		if T.codes[code]['local_min'] is None:
 			# 获取120日的成交额
@@ -869,7 +869,9 @@ def trade_on_handle_bar(contextInfo):
 
 		# 买入: 
 		current = current_low
-		if current > T.BUY_THRESHOLD * T.codes[code]['low'] and T.codes[code]['low_is_changed'] and T.LOW_HIGH_THRESHOLD * T.codes[code]['low'] < T.codes[code]['high']:
+		do_back_test = current_high > T.BUY_THRESHOLD * T.codes[code]['low'] and current_low < T.BUY_THRESHOLD * T.codes[code]['low'] and contextInfo.do_back_test
+		real = current > T.BUY_THRESHOLD * T.codes[code]['low'] and not contextInfo.do_back_test
+		if (real or do_back_test) and T.codes[code]['low_is_changed'] and T.LOW_HIGH_THRESHOLD * T.codes[code]['low'] < T.codes[code]['high']:
 			T.codes[code]['low_is_changed'] = False
 			# 持仓超时时不再买入
 			if T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 20:
@@ -900,8 +902,8 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, comment=f'{current_time}')
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
+			id = db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, comment=f'{current_time}')
+			record = {'id': id, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
 			continue
 		# 卖出：
@@ -929,8 +931,8 @@ def trade_on_handle_bar(contextInfo):
 				average_price = last_sellable_buy_record['price']
 				profit = round((T.codes[code]['price'] - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 				trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
-				db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit, comment=f'{current_time}')
-				record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
+				id = db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit, comment=f'{current_time}')
+				record = {'id': id, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 				T.codes[code]['records'].append(record)
 			continue
 	# 打印变化的表格内容
@@ -1320,15 +1322,17 @@ def db_insert_record(code, name, date=None, type=None, price=None, shares=None, 
 	# 参数校验
 	if not code or not name or not date or not type or not price:
 		log(f'db_insert_record(): 参数校验失败 - code={code}, name={name}, date={date}, type={type}, price={price}')
-		return
+		return None
 	# 插入数据库
 	conn = sqlite3.connect(T.qmt_db_path)
 	cursor = conn.cursor()
 	cursor.execute('INSERT INTO records (code, name, date, type, price, shares, profit, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
 				   (code, name, date, type, round(price, 2), shares, profit, comment))
 	conn.commit()
+	record_id = cursor.lastrowid
 	conn.close()
-	log(f'db_insert_record(): code={code}, name={name}, date={date}, type={type}, price={price:.2f}, shares={shares}, profit={profit}, comment={comment}')
+	log(f'db_insert_record(): id={record_id}, code={code}, name={name}, date={date}, type={type}, price={price:.2f}, shares={shares}, profit={profit}, comment={comment}')
+	return record_id
 
 def db_insert_recommend(code, name, is_valid, recommend_date, lateral_high_date):
 	# 参数校验
