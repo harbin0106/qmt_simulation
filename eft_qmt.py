@@ -270,8 +270,8 @@ def init_load_recommendations_from_db(contextInfo):
 		if not records:
 			recommend_date = T.codes[code]['recommend_date']
 			trading_dates = contextInfo.get_trading_dates(code, recommend_date, T.CURRENT_DATE, -1, '1d')
-			if len(trading_dates) < 3:
-				log(f'init_load_recommendations_from_db(): Removing code {code} {T.codes[code]["name"]} with empty records and recommend_date {recommend_date} less than 3 trading days before T.CURRENT_DATE {T.CURRENT_DATE}.')
+			if len(trading_dates) > 24:
+				log(f'init_load_recommendations_from_db(): Removing code {code} {T.codes[code]["name"]} with empty records and recommend_date {recommend_date} more than 3 trading days before T.CURRENT_DATE {T.CURRENT_DATE}.')
 				del T.codes[code]
 				continue
 
@@ -334,15 +334,16 @@ def init_trade_parameters(contextInfo):
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
 	T.SLOPE = np.log(1.07)
-	T.BUY_THRESHOLD = 1.04
+	T.BUY_THRESHOLD = 1.03
 	T.SELL_THRESHOLD = 0.99
-	T.PROFIT_THRESHOLD = 0.02
+	T.PROFIT_THRESHOLD = 0.03
+	T.LOW_HIGH_THRESHOLD = 1.05
 	T.BUY_AMOUNT = None
 	T.MARKET_OPEN_TIME = '09:30:00'
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-10-01 09:30:00'
+	T.BACK_TEST_START_DATE = '2025-01-21 09:30:00'
 	T.BACK_TEST_END_DATE = '2026-01-15 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
@@ -868,7 +869,7 @@ def trade_on_handle_bar(contextInfo):
 
 		# 买入: 
 		current = current_low
-		if current > T.BUY_THRESHOLD * T.codes[code]['low'] and T.codes[code]['low_is_changed']:
+		if current > T.BUY_THRESHOLD * T.codes[code]['low'] and T.codes[code]['low_is_changed'] and T.LOW_HIGH_THRESHOLD * T.codes[code]['low'] < T.codes[code]['high']:
 			T.codes[code]['low_is_changed'] = False
 			# 持仓超时时不再买入
 			if T.codes[code]['hold_days'] is not None and T.codes[code]['hold_days'] >= 20:
