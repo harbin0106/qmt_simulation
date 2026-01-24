@@ -320,14 +320,14 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-10-01 09:30:00'
+	T.BACK_TEST_START_DATE = '2025-11-20 09:30:00'
 	T.BACK_TEST_END_DATE = '2026-01-23 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
 	# T.qmt_db_path = 'C:\\a\\trade\\量化\\中信证券\\code\\阿里log\\qmt20260107.db'
-	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/amount_ratio_qmt.db'
+	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/line_qmt.db'
 
 def trade_get_unified_growth_rate(contextInfo):
 	df_all = db_load_all()
@@ -1338,6 +1338,9 @@ def db_init():
 		is_valid TEXT,
 		recommend_date TEXT,
 		lateral_high_date TEXT,
+		line_type TEXT,
+		line_start_date TEXT,
+		line_slope REAL,
 		PRIMARY KEY (code, recommend_date)
 	)
 	''')
@@ -1363,7 +1366,7 @@ def db_load_all():
 	conn = sqlite3.connect(T.qmt_db_path)
 	current_date = T.CURRENT_DATE
 	query = """
-SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
+SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, r.line_type, r.line_start_date, r.line_slope, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
 FROM (
 	SELECT r1.*
 	FROM recommends r1
