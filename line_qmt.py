@@ -136,6 +136,10 @@ def init_load_recommendations_from_db(contextInfo):
 				'name': df.name,
 				'recommend_date': df.recommend_date,
 				'lateral_high_date': df.lateral_high_date,
+				'line_type': df.line_type,
+				'line_start_date': df.line_start_date,
+				'line_slope': df.line_slope,
+				'line_price': None,
 				'last_buy_date': None,  # BUY_AT_LOCAL_MIN的日期
 				'price': None,          # 当日交易价格
 				'last_price': None,     # 上次交易价格
@@ -714,6 +718,80 @@ def trade_get_last_buy_price(contextInfo, code):
 	latest_buy_record = max(buy_records, key=lambda r: (r['date'], r['id']))
 	return latest_buy_record['price']
 
+def trade_get_line_price(contextInfo, code):
+	"""
+	计算指定股票的线性价格。
+	
+	参数校验：
+	- code: 股票代码，必须存在且在T.codes中
+	- T.codes[code]['line_start_date']: 必须存在且为有效日期
+	- T.codes[code]['line_slope']: 必须存在且为数值
+	- T.CURRENT_DATE: 必须存在且为有效日期
+	
+	计算逻辑：
+	1. 获取T.codes[code]['line_start_date']该日的最低股价b
+	2. 计算从T.codes[code]['line_start_date']到T.CURRENT_DATE的交易日天数，然后减一得到days
+	3. line_price = np.exp(np.log(T.codes[code]['line_slope']) * days + np.log(b))
+	4. 返回line_price
+	
+	返回值：
+	- 成功时返回计算得到的line_price（浮点数）
+	- 失败时返回None
+	"""
+	# 参数校验
+	if not code:
+		log(f'trade_get_line_price(): Error! code参数为空')
+		return None
+	if code not in T.codes:
+		log(f'trade_get_line_price(): Error! 股票代码 {code} 不在T.codes中')
+		return None
+	if 'line_start_date' not in T.codes[code] or not T.codes[code]['line_start_date']:
+		log(f'trade_get_line_price(): Error! {code} {T.codes[code].get("name", "")} 的line_start_date参数为空')
+		return None
+	if 'line_slope' not in T.codes[code] or T.codes[code]['line_slope'] is None:
+		log(f'trade_get_line_price(): Error! {code} {T.codes[code].get("name", "")} 的line_slope参数为空')
+		return None
+	if not T.CURRENT_DATE:
+		log(f'trade_get_line_price(): Error! T.CURRENT_DATE参数为空')
+		return None
+	
+	line_start_date = T.codes[code]['line_start_date']
+	line_slope = T.codes[code]['line_slope']
+	# 获取line_start_date当日的最低股价
+	try:
+		market_data = contextInfo.get_market_data_ex(['low'], [code], period='1d', start_time=line_start_date, end_time=line_start_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+		if code not in market_data or market_data[code].empty:
+			log(f'trade_get_line_price(): Error! 无法获取{code} {T.codes[code].get("name", "")}在{line_start_date}的最低股价数据')
+			return None
+		b = round(market_data[code]['low'][0], 2)
+		if b == 0:
+			log(f'trade_get_line_price(): Error! {code} {T.codes[code].get("name", "")}在{line_start_date}的最低股价为0')
+			return None
+	except Exception as e:
+		log(f'trade_get_line_price(): Error! 获取{code} {T.codes[code].get("name", "")}最低股价时发生异常: {e}')
+		return None
+	# 计算交易日天数
+	try:
+		trading_dates = contextInfo.get_trading_dates(code, line_start_date, T.CURRENT_DATE, -1, '1d')
+		if not trading_dates:
+			log(f'trade_get_line_price(): Error! 无法获取{code} {T.codes[code].get("name", "")}从{line_start_date}到{T.CURRENT_DATE}的交易日数据')
+			return None
+		days = len(trading_dates) - 1  # 减一得到days
+		if days < 0:
+			log(f'trade_get_line_price(): Error! 计算得到的交易日天数为负数: {days}')
+			return None
+	except Exception as e:
+		log(f'trade_get_line_price(): Error! 计算交易日天数时发生异常: {e}')
+		return None
+	# 计算line_price
+	try:
+		line_price = np.exp(np.log(line_slope) * days + np.log(b))
+		log(f'trade_get_line_price(): {code} {T.codes[code].get("name", "")}, line_start_date={line_start_date}, b={b:.2f}, days={days}, line_slope={line_slope:.3f}, line_price={line_price:.2f}')
+		return line_price
+	except Exception as e:
+		log(f'trade_get_line_price(): Error! 计算line_price时发生异常: {e}')
+		return None
+
 def trade_on_handle_bar(contextInfo):
 	bar_date = timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d')
 	if T.CURRENT_DATE != bar_date:
@@ -831,6 +909,12 @@ def trade_on_handle_bar(contextInfo):
 				cash = 100000
 			T.BUY_AMOUNT = cash / 10
 			log(f'T.BUY_AMOUNT={T.BUY_AMOUNT:.0f}')
+		if T.codes[code]['line_price'] is None and T.CURRENT_DATE > T.codes[code]['line_start_date']:
+			T.codes[code]['line_price'] = trade_get_line_price(contextInfo, code)
+			if T.codes[code]['line_price'] is None:
+				log(f'trade_on_handle_bar(): {code} {T.codes[code]["name"]}, Error! Invalid line_price!')
+				continue
+			# log(f'trade_on_handle_bar(): {code} {T.codes[code]["name"]}, line_price={T.codes[code]["line_price"]:.2f}')
 		# 每分钟打印一次数据值
 		if not T.last_current_time or T.last_current_time.get(code) != current_time[:-3] and False:
 			T.last_current_time[code] = current_time[:-3]
