@@ -759,11 +759,17 @@ def trade_get_line_price(contextInfo, code):
 	line_slope = T.codes[code]['line_slope']
 	# 获取line_start_date当日的最低股价
 	try:
-		market_data = contextInfo.get_market_data_ex(['low'], [code], period='1d', start_time=line_start_date, end_time=line_start_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
+		market_data = contextInfo.get_market_data_ex(['low', 'high'], [code], period='1d', start_time=line_start_date, end_time=line_start_date, count=1, dividend_type='front', fill_data=False, subscribe=True)
 		if code not in market_data or market_data[code].empty:
 			log(f'trade_get_line_price(): Error! 无法获取{code} {T.codes[code].get("name", "")}在{line_start_date}的最低股价数据')
 			return None
-		b = round(market_data[code]['low'][0], 2)
+		if T.codes[code]['line_type'] == 'LINE_RISING':
+			b = round(market_data[code]['low'][0], 2)
+		elif T.codes[code]['line_type'] == 'LINE_FALLING':
+			b = round(market_data[code]['high'][0], 2)
+		else:
+			log(f'trade_get_line_price(): {code} {T.codes[code].get("name", "")} Error! Invalid line type!')
+			return None
 		if b == 0:
 			log(f'trade_get_line_price(): Error! {code} {T.codes[code].get("name", "")}在{line_start_date}的最低股价为0')
 			return None
@@ -785,7 +791,10 @@ def trade_get_line_price(contextInfo, code):
 		return None
 	# 计算line_price
 	try:
-		line_price = np.exp(np.log(line_slope) * days + np.log(b))
+		if np.isclose(line_slope, 0.0):
+			line_price =  b
+		else:
+			line_price = np.exp(np.log(line_slope) * days + np.log(b))
 		log(f'trade_get_line_price(): {code} {T.codes[code].get("name", "")}, line_start_date={line_start_date}, b={b:.2f}, days={days}, line_slope={line_slope:.3f}, line_price={line_price:.2f}')
 		return round(line_price, 2)
 	except Exception as e:
@@ -920,19 +929,18 @@ def trade_on_handle_bar(contextInfo):
 			T.last_current_time[code] = current_time[:-3]
 			log(f'{code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}')
 		
-		# 买入: 高于突破线买入
+		# 买入: 高于下降线或者上升线买入
 		current = current_high
-		breakout_price = T.codes[code]['lateral_high'] if T.codes[code]['line_price'] is None else max(T.codes[code]['lateral_high'], T.codes[code]['line_price'])
-		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in [None, 'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'] and current > breakout_price:
+		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in [None, 'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'] and T.codes[code]['line_type'] in ['LINE_FALLING', 'LINE_RISING'] and T.codes[code]['line_price'] is not None and current > T.codes[code]['line_price']:
 			T.codes[code]['type'] = 'BUY_AT_LOCAL_MIN'
 			if contextInfo.do_back_test:
-				if opens[-1] > breakout_price:
+				if opens[-1] > T.codes[code]['line_price']:
 					T.codes[code]['price'] = opens[-1]
 				else:
-					T.codes[code]['price'] = breakout_price
+					T.codes[code]['price'] = T.codes[code]['line_price']
 			else:
 				T.codes[code]['price'] = current
-			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}, breakout_price={breakout_price}')
+			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, lateral_high={lateral_high:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}, line_price={T.codes[code]["line_price"]}')
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
@@ -946,7 +954,7 @@ def trade_on_handle_bar(contextInfo):
 
 		# 卖出: current低于T.codes[code]['line_price']就要卖出
 		current = current_low
-		if current_time >= '14:55:00' and ((T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']) or (T.codes[code]['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'])) and T.codes[code]['line_type'] == 'LINE_SUPPORT' and T.codes[code]['line_price'] is not None and current < T.codes[code]['line_price']:
+		if current_time >= '14:55:00' and ((T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in ['BUY_AT_LOCAL_MIN', 'BUY_AT_STEP_1', 'BUY_AT_STEP_2', 'BUY_AT_STEP_3', 'SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3']) or (T.codes[code]['type'] in ['SELL_AT_STEP_1', 'SELL_AT_STEP_2', 'SELL_AT_STEP_3'])) and T.codes[code]['line_type'] in ['LINE_RISING'] and T.codes[code]['line_price'] is not None and current < T.codes[code]['line_price']:
 			T.codes[code]['type'] = 'SELL_AT_LOCAL_MAX'
 			if contextInfo.do_back_test:
 				if highs[-1] > T.codes[code]['line_price']:
