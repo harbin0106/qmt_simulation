@@ -324,7 +324,7 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-12-03 09:30:00'
+	T.BACK_TEST_START_DATE = '2025-11-19 09:30:00'
 	T.BACK_TEST_END_DATE = '2026-01-23 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
@@ -1478,10 +1478,18 @@ def db_init():
 		is_valid TEXT,
 		recommend_date TEXT,
 		lateral_high_date TEXT,
+		PRIMARY KEY (code, recommend_date)
+	)
+	''')
+
+	cursor.execute('''
+	CREATE TABLE IF NOT EXISTS lines (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		code TEXT,
+		name TEXT,
 		line_type TEXT,
 		line_start_date TEXT,
-		line_slope REAL,
-		PRIMARY KEY (code, recommend_date)
+		line_slope REAL
 	)
 	''')
 
@@ -1503,10 +1511,11 @@ def db_init():
 
 def db_load_all():
 	# 去掉recommend表格的recommend_date大于T.CURRENT_DATE的数据行, 去掉records表格的date大于T.CURRENT_DATE的数据行, 去掉recommend表格里code重复的且它的recommend_date较小的数据行.
+	# 在加载lines表格的数据时, 仅加载'id'最大的那行code对应的数据
 	conn = sqlite3.connect(T.qmt_db_path)
 	current_date = T.CURRENT_DATE
 	query = """
-SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, r.line_type, r.line_start_date, r.line_slope, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
+SELECT r.code, r.name, r.is_valid, r.recommend_date, r.lateral_high_date, l.line_type, l.line_start_date, l.line_slope, rec.id, rec.date, rec.type, rec.price, rec.shares, rec.profit, rec.comment
 FROM (
 	SELECT r1.*
 	FROM recommends r1
@@ -1517,6 +1526,15 @@ FROM (
 		GROUP BY code
 	) r2 ON r1.code = r2.code AND r1.recommend_date = r2.max_date
 ) r
+LEFT JOIN (
+	SELECT l1.*
+	FROM lines l1
+	INNER JOIN (
+		SELECT code, MAX(id) AS max_id
+		FROM lines
+		GROUP BY code
+	) l2 ON l1.code = l2.code AND l1.id = l2.max_id
+) l ON r.code = l.code
 LEFT JOIN records rec ON r.code = rec.code AND (rec.date IS NULL OR rec.date <= ?)
 """
 	df = pd.read_sql_query(query, conn, params=(current_date, current_date))
