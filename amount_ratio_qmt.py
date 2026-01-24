@@ -127,7 +127,7 @@ def init_load_recommendations_from_db(contextInfo):
 	# 	log(f'init_load_recommendations_from_db(): Warning! recommend_date {recommend_date} is not the latest in database {latest_recommend_date}!')
 	df_filtered = df_all[df_all['is_valid'] == 'Y']
 	# df_filtered仅保留code为002975.SZ和002846.SZ的股票
-	df_filtered = df_filtered[df_filtered['code'].isin(['605376.SH'])]
+	# df_filtered = df_filtered[df_filtered['code'].isin(['002300.SZ'])]
 	# 根据df_all的表格结构, 把所有数据转换到T.codes里
 	for df in df_filtered.itertuples():
 		code = df.code
@@ -320,14 +320,14 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-09-01 09:30:00'
-	T.BACK_TEST_END_DATE = '2026-01-21 15:00:00'
+	T.BACK_TEST_START_DATE = '2025-10-01 09:30:00'
+	T.BACK_TEST_END_DATE = '2026-01-23 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
 	# 用于过滤log
 	T.last_current_time = {}
-	T.qmt_db_path = 'C:\\a\\trade\\量化\\中信证券\\code\\阿里log\\qmt20260107.db'
-	# T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/qmt.db'
+	# T.qmt_db_path = 'C:\\a\\trade\\量化\\中信证券\\code\\阿里log\\qmt20260107.db'
+	T.qmt_db_path = 'C:/a/trade/量化/中信证券/code/amount_ratio_qmt.db'
 
 def trade_get_unified_growth_rate(contextInfo):
 	df_all = db_load_all()
