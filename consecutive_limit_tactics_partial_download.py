@@ -739,20 +739,20 @@ def data_download_single_stock_data(contextInfo, code, start_date, end_date):
 		df['name'] = name
 
 		# 获取换手率
-		turnover_df = contextInfo.get_turnover_rate([code], start_date, end_date)
-		if not turnover_df.empty:
-			turnover_df['date'] = turnover_df.index.astype(str)
-			# 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
-			if code in turnover_df.columns:
-				turnover_df = turnover_df.rename(columns={code: 'turnover_rate'})
-				df = df.merge(turnover_df[['date', 'turnover_rate']], on='date', how='left')
-			else:
-				df['turnover_rate'] = None
-				print(f'data_download_single_stock_data(): Warning! {code} 的换手率数据列不存在')
-		else:
-			df['turnover_rate'] = None
-			print(f'data_download_single_stock_data(): Error! 未获取到 {code} 的换手率数据')
-
+		# turnover_df = contextInfo.get_turnover_rate([code], start_date, end_date)
+		# if not turnover_df.empty:
+		# 	turnover_df['date'] = turnover_df.index.astype(str)
+		# 	# 假设换手率数据以股票代码为列名，需要重命名为 'turnover_rate'
+		# 	if code in turnover_df.columns:
+		# 		turnover_df = turnover_df.rename(columns={code: 'turnover_rate'})
+		# 		df = df.merge(turnover_df[['date', 'turnover_rate']], on='date', how='left')
+		# 	else:
+		# 		df['turnover_rate'] = None
+		# 		print(f'data_download_single_stock_data(): Warning! {code} 的换手率数据列不存在')
+		# else:
+		# 	df['turnover_rate'] = None
+		# 	print(f'data_download_single_stock_data(): Error! 未获取到 {code} 的换手率数据')
+		df['turnover_rate'] = None
 		# 获取市盈率和流通市值
 		try:
 			pe_data = contextInfo.get_financial_data(['利润表.净利润', 'CAPITALSTRUCTURE.circulating_capital', 'CAPITALSTRUCTURE.total_capital'], [code], start_date, end_date, report_type='report_time')
