@@ -322,7 +322,7 @@ def init_trade_parameters(contextInfo):
 	T.sale_stamp_duty_rate = 0.0005
 	# 算法参数
 	T.SLOPE = np.log(1.07)
-	T.BUY_THRESHOLD = 1.03
+	T.BUY_THRESHOLD = 1.01
 	T.SELL_THRESHOLD = 0.99
 	T.PROFIT_THRESHOLD = 0.03
 	T.LOW_HIGH_THRESHOLD = 1.05
@@ -331,8 +331,8 @@ def init_trade_parameters(contextInfo):
 	T.CHECK_CLOSE_PRICE_TIME = '14:55:30'
 	T.TRANSACTION_CLOSE_TIME = '14:55:40'
 	T.MARKET_CLOSE_TIME= '15:00:00'	
-	T.BACK_TEST_START_DATE = '2025-11-19 09:30:00'
-	T.BACK_TEST_END_DATE = '2026-01-23 15:00:00'
+	T.BACK_TEST_START_DATE = '2026-01-26 09:30:00'
+	T.BACK_TEST_END_DATE = '2026-01-26 15:00:00'
 	T.CURRENT_DATE = date.today().strftime('%Y%m%d')
 	T.last_codes = None
 	# 用于过滤log
@@ -835,7 +835,7 @@ def trade_on_handle_bar(contextInfo):
 		# 获取当前的最新价格
 		if contextInfo.do_back_test:
 			bar_time= timetag_to_datetime(contextInfo.get_bar_timetag(contextInfo.barpos), '%Y%m%d%H%M00')
-			market_data_last_price = contextInfo.get_market_data_ex(['close', 'high', 'low'], [code], period='5m', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False, subscribe=True)
+			market_data_last_price = contextInfo.get_market_data_ex(['close', 'high', 'low'], [code], period='1m', start_time=bar_time, end_time=bar_time, count=1, dividend_type='front', fill_data=False, subscribe=True)
 			# log(f'bar_time={bar_time}, market_data_last_price=\n{market_data_last_price[code].tail(100)}')
 			if market_data_last_price[code].empty:
 				log(f'trade_on_handle_bar(): Error! 未获取到{code} {T.codes[code]["name"]} 的{bar_time}分钟线数据!')
@@ -936,21 +936,24 @@ def trade_on_handle_bar(contextInfo):
 		
 		# 买入: 高于下降线或者上升线买入
 		current = current_high
-		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in [None, 'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'] and T.codes[code]['line_type'] in ['LINE_FALLING', 'LINE_RISING'] and T.codes[code]['line_price'] is not None and current > T.codes[code]['line_price']:
+		# 回测模式下, 如果该K线的区间覆盖买点, 且最低价更新过, 且高低价区间大于阈值, 符合条件
+		do_back_test = current_high > T.BUY_THRESHOLD * T.codes[code]['low'] and current_low < T.BUY_THRESHOLD * T.codes[code]['low'] and T.codes[code]['low_is_changed'] and T.LOW_HIGH_THRESHOLD * T.codes[code]['low'] < T.codes[code]['high'] and contextInfo.do_back_test
+		# 实盘模式下, 如果当前价大于买点, 且最低价更新过, 且高低价区间大于阈值, 符合条件
+		real = current > T.BUY_THRESHOLD * T.codes[code]['low'] and T.codes[code]['low_is_changed'] and T.LOW_HIGH_THRESHOLD * T.codes[code]['low'] < T.codes[code]['high'] and not contextInfo.do_back_test
+		if T.codes[code]['type'] in [None] and T.codes[code]['last_type'] in [None, 'SELL_AT_LOCAL_MAX', 'SELL_AT_TIMEOUT', 'SELL_AT_STEP_0'] and T.codes[code]['line_type'] in ['LINE_FALLING', 'LINE_RISING'] and T.codes[code]['line_price'] is not None and current > T.codes[code]['line_price'] and (do_back_test or real):
+			# 复位最低价更新状态位
+			T.codes[code]['low_is_changed'] = False
 			T.codes[code]['type'] = 'BUY_AT_LOCAL_MIN'
 			if contextInfo.do_back_test:
-				if opens[-1] > T.codes[code]['line_price']:
-					T.codes[code]['price'] = opens[-1]
-				else:
-					T.codes[code]['price'] = T.codes[code]['line_price']
+				T.codes[code]['price'] = T.BUY_THRESHOLD * T.codes[code]['low']
 			else:
 				T.codes[code]['price'] = current
 			log(f'{current_time} {T.codes[code]["type"]}: {code} {T.codes[code]["name"]}, current={current:.2f}, opens[-1]={opens[-1]:.2f}, amounts[-1]={amounts[-1]:.1f}, avg_amount_120={avg_amount_120:.1f}, rates[-1]={rates[-1]:.2f}, rates[-2]={rates[-2]:.2f}, rates[-3]={rates[-3]:.2f}, amount_ratios[-1]={amount_ratios[-1]:.2f}, amount_ratios[-2]={amount_ratios[-2]:.2f}, amount_ratios[-3]={amount_ratios[-3]:.2f}, closes[-2]={closes[-2]:.2f}, closes[-3]={closes[-3]:.2f}, lows[-2]={lows[-2]:.2f}, lows[-3]={lows[-3]:.2f}, local_max={local_max:.2f}, local_min={local_min:.2f}, line_price={T.codes[code]["line_price"]}')
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
+			id = db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, comment=f'{current_time}')
+			record = {'id': id, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
 			# 因为今天交易了, 所以持仓天数要减1
 			if T.codes[code]['hold_days'] is not None:
@@ -973,8 +976,8 @@ def trade_on_handle_bar(contextInfo):
 			average_price = trade_get_average_price(contextInfo, code, T.codes[code]['type'])
 			profit = round((current - average_price) / average_price * 100, 2) if average_price != 0 else np.nan
 			trade_sell_stock_by_shares(contextInfo, code, shares, T.codes[code]['price'], T.codes[code]['type'])
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit)
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
+			id = db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, profit=profit, comment=f'{current_time}')
+			record = {'id': id, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': profit, 'comment': None}
 			T.codes[code]['records'].append(record)
 			# 因为今天交易了, 所以持仓天数要减1
 			if T.codes[code]['hold_days'] is not None:
@@ -1040,8 +1043,8 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
+			id = db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, comment=f'{current_time}')
+			record = {'id': id, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
 			# 因为今天交易了, 所以持仓天数要减1
 			if T.codes[code]['hold_days'] is not None:
@@ -1055,8 +1058,8 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
+			id = db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, comment=f'{current_time}')
+			record = {'id': id, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
 			# 因为今天交易了, 所以持仓天数要减1
 			if T.codes[code]['hold_days'] is not None:
@@ -1069,8 +1072,8 @@ def trade_on_handle_bar(contextInfo):
 			shares = trade_buy_stock_by_amount(contextInfo, code, T.BUY_AMOUNT, T.codes[code]['price'], T.codes[code]['type'])
 			if contextInfo.do_back_test:
 				shares = T.BUY_AMOUNT / T.codes[code]['price'] // 100 * 100
-			db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares)
-			record = {'id': np.nan, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
+			id = db_insert_record(code, name=T.codes[code]['name'], date=T.CURRENT_DATE, type=T.codes[code]['type'], price=T.codes[code]['price'], shares=shares, comment=f'{current_time}')
+			record = {'id': id, 'date': T.CURRENT_DATE, 'type': T.codes[code]['type'], 'price': T.codes[code]['price'], 'shares': shares, 'profit': None, 'comment': None}
 			T.codes[code]['records'].append(record)
 			# 因为今天交易了, 所以持仓天数要减1
 			if T.codes[code]['hold_days'] is not None:
