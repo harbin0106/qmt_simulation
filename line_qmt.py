@@ -1149,7 +1149,7 @@ def trade_on_handle_bar(contextInfo):
 	# 打印变化的表格内容
 	if T.last_codes is None or T.last_codes != T.codes:
 		# df = pd.DataFrame.from_dict(T.codes, orient='index')
-		log(f'T.codes=\n{T.codes}')
+		log(f'{current_time} T.codes=\n{T.codes}')
 		T.last_codes = copy.deepcopy(T.codes)
 
 def trade_query_info(contextInfo):
